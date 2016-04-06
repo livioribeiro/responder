@@ -1,59 +1,49 @@
-use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::Duration;
 
+use regex::{self, Regex};
 use rotor::{Scope, Time};
 use rotor_http::server::{RecvMode, Server, Head, Response};
 
-#[derive(Clone, Debug)]
-pub struct Route {
-    status: u16,
-    data: String,
-}
+use super::handler::Handler;
 
 pub struct Context {
-    routes: HashMap<String, Rc<Route>>,
+    routes: Vec<(Regex, Rc<Handler>)>,
 }
 
 impl Context {
     pub fn new() -> Self {
         Context {
-            routes: HashMap::new(),
+            routes: Vec::new(),
         }
     }
 
-    pub fn add_route(&mut self, path: String, status: u16, data: String) {
-        self.routes.insert(path, Rc::new(Route { status: status, data: data }));
-    }
-
-    pub fn with_route(mut self, path: String, status: u16, data: String) -> Self {
-        self.add_route(path, status, data);
-        self
+    pub fn add_route(&mut self, path: &str, handler: Handler) -> Result<(), regex::Error> {
+        let re = try!(Regex::new(path));
+        self.routes.push((re, Rc::new(handler)));
+        Ok(())
     }
 }
 
 pub trait Router {
-    fn route(&self, path: &str) -> Option<Rc<Route>>;
+    fn match_route(&self, path: &str) -> Option<Rc<Handler>>;
 }
 
 impl Router for Context {
-    fn route(&self, path: &str) -> Option<Rc<Route>> {
-        self.routes.get(path).map(|route| route.clone())
+    fn match_route(&self, path: &str) -> Option<Rc<Handler>> {
+        for &(ref re, ref route) in self.routes.iter() {
+            if re.is_match(path) {
+                return Some(route.clone())
+            }
+        }
+        None
     }
 }
 
 #[derive(Clone, Debug)]
 pub enum Responder {
-    Respond(Rc<Route>),
+    Respond(Rc<Handler>),
     NotFound,
-}
-
-fn send_string(res: &mut Response, data: &[u8]) {
-    res.status(200, "OK");
-    res.add_length(data.len() as u64).unwrap();
-    res.done_headers().unwrap();
-    res.write_body(data);
-    res.done();
 }
 
 fn send_not_found(res: &mut Response) {
@@ -73,7 +63,7 @@ impl Server for Responder {
         scope: &mut Scope<Self::Context>)
         -> Option<(Self, RecvMode, Time)>
     {
-        let responder = match scope.route(head.path) {
+        let responder = match scope.match_route(head.path) {
             Some(route) => Responder::Respond(route.clone()),
             None => Responder::NotFound,
         };
@@ -86,8 +76,8 @@ impl Server for Responder {
         -> Option<Self>
     {
         match self {
-            Responder::Respond(route) => {
-                send_string(res, route.data.as_bytes())
+            Responder::Respond(handler) => {
+                handler.handle(res);
             },
             Responder::NotFound => {
                 send_not_found(res);
