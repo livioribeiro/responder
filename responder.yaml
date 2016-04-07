@@ -1,0 +1,14 @@
+routes:
+  /:
+    GET:
+      code: 200
+      data: '{ "name": "value" }'
+    POST:
+      code: 201
+  /foo/(\d+?):
+    GET:
+      code: 200
+      data: '{ "foo": ["bar", "baz"] }'
+
+notfound:
+  data: '{ "status": "not found" }'
