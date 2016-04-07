@@ -75,7 +75,7 @@ fn description(status: u16) -> &'static str {
             return description
         }
     }
-    ""
+    "[Unknown HTTP Status]"
 }
 
 pub fn build_context(filename: &Path) -> Result<Context, String> {
