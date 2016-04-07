@@ -1,8 +1,6 @@
-use std::path::Path;
-
 use super::server::{Context};
 use super::handler::Handler;
-use super::config::{self, Config};
+use super::config::Config;
 
 const STATUS_CODES: [(u16, &'static str); 62] = [
     (100, "Continue"),
@@ -78,10 +76,9 @@ fn description(status: u16) -> &'static str {
     "[Unknown HTTP Status]"
 }
 
-pub fn build_context(filename: &Path) -> Result<Context, String> {
+pub fn build_context(configuration: Config) -> Result<Context, String> {
     let mut context = Context::new();
 
-    let configuration: Config = try!(config::read_config(filename));
     for (path, route) in configuration.routes.iter() {
         for (method, settings) in route.iter() {
             let status_code = settings.code;

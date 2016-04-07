@@ -23,10 +23,17 @@ pub struct NotFound {
     pub data: Option<String>,
 }
 
+#[derive(RustcDecodable, Debug, Default)]
+pub struct Settings {
+    pub address: Option<String>,
+    pub port: Option<u16>,
+}
+
 #[derive(RustcDecodable, Debug)]
 pub struct Config {
     pub routes: BTreeMap<String, MethodRoute>,
     pub notfound: Option<NotFound>,
+    pub settings: Settings,
 }
 
 pub fn validator<'a>() -> V::Structure<'a> {
@@ -44,9 +51,14 @@ pub fn validator<'a>() -> V::Structure<'a> {
         .member("headers", V::Mapping::new(V::Scalar::new(), V::Scalar::new()))
         .member("data", V::Scalar::new().optional().default(""));
 
+    let settings = V::Structure::new()
+        .member("address", V::Scalar::new().optional())
+        .member("port", V::Numeric::new().optional());
+
     V::Structure::new()
         .member("routes", routes)
         .member("notfound", not_found)
+        .member("settings", settings)
 }
 
 pub fn read_config(filename: &Path) -> Result<Config, String> {

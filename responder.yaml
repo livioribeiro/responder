@@ -12,3 +12,7 @@ routes:
 
 notfound:
   data: '{ "status": "not found" }'
+
+settings:
+  address: 0.0.0.0 # default 127.0.0.1
+  port: 8000 # default 7000
