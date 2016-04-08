@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use super::server::{Context};
+use super::context::{Context};
 use super::handler::Handler;
 use super::config::Config;
 
@@ -99,9 +99,7 @@ fn process_headers(handler: &mut Handler,
     };
 }
 
-pub fn build_context(configuration: Config) -> Result<Context, String> {
-    let mut context = Context::new();
-
+pub fn build_context(context: &mut Context, configuration: Config) -> Result<(), String> {
     for (path, route) in configuration.routes.iter() {
         for (method, route_config) in route.iter() {
             let status_code = route_config.code;
@@ -163,5 +161,5 @@ pub fn build_context(configuration: Config) -> Result<Context, String> {
         None => {}
     }
 
-    Ok(context)
+    Ok(())
 }

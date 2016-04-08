@@ -1,61 +1,11 @@
 use std::rc::Rc;
 use std::time::Duration;
 
-use regex::{self, Regex};
 use rotor::{Scope, Time};
 use rotor_http::server::{RecvMode, Server, Head, Response};
 
+use super::context::Context;
 use super::handler::Handler;
-
-pub struct Route {
-    re: Regex,
-    method: String,
-    handler: Rc<Handler>,
-}
-
-impl Route {
-    pub fn new(re: Regex, method: String, handler: Handler) -> Self {
-        Route {
-            re: re,
-            method: method,
-            handler: Rc::new(handler),
-        }
-    }
-
-    pub fn is_match(&self, method: &str, path: &str) -> bool {
-        self.method == method && self.re.is_match(path)
-    }
-
-    pub fn handler(&self) -> Rc<Handler> {
-        self.handler.clone()
-    }
-}
-
-pub struct Context {
-    routes: Vec<Route>,
-    not_found_handler: Option<Handler>,
-}
-
-impl Context {
-    pub fn new() -> Self {
-        Context {
-            routes: Vec::new(),
-            not_found_handler: None,
-        }
-    }
-
-    pub fn add_route(&mut self, path: &str, method: String, handler: Handler)
-        -> Result<(), regex::Error>
-    {
-        let re = try!(Regex::new(path));
-        self.routes.push(Route::new(re, method, handler));
-        Ok(())
-    }
-
-    pub fn set_not_found_handler(&mut self, not_found: Handler) {
-        self.not_found_handler = Some(not_found);
-    }
-}
 
 pub trait Router {
     fn match_route(&self, method: &str, path: &str) -> Option<Rc<Handler>>;
@@ -63,7 +13,7 @@ pub trait Router {
 
 impl Router for Context {
     fn match_route(&self, method: &str, path: &str) -> Option<Rc<Handler>> {
-        for ref route in self.routes.iter() {
+        for ref route in self.routes().iter() {
             if route.is_match(method, path) {
                 return Some(route.handler())
             }
@@ -96,6 +46,16 @@ impl Server for Responder {
         scope: &mut Scope<Self::Context>)
         -> Option<(Self, RecvMode, Time)>
     {
+        if scope.reload() {
+            match scope.rebuild() {
+                Ok(_) => {}
+                Err(e) => {
+                    println!("{}", e);
+                    return None
+                }
+            }
+        }
+
         let responder = match scope.match_route(head.method, head.path) {
             Some(route) => Responder::Respond(route.clone()),
             None => Responder::NotFound,
@@ -113,9 +73,9 @@ impl Server for Responder {
                 handler.handle(res);
             },
             Responder::NotFound => {
-                match &scope.not_found_handler {
-                    &Some(ref handler) => handler.handle(res),
-                    &None => send_not_found(res),
+                match scope.not_found_handler() {
+                    Some(ref handler) => handler.handle(res),
+                    None => send_not_found(res),
                 }
             }
         }

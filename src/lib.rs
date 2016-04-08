@@ -8,9 +8,11 @@ pub mod server;
 pub mod handler;
 pub mod config;
 pub mod builder;
+pub mod context;
 
-pub use server::{Context, Responder};
+pub use server::Responder;
 pub use handler::Handler;
+pub use context::Context;
 
 pub use config::read_config;
 pub use builder::build_context;

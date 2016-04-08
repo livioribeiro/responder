@@ -14,7 +14,7 @@ use rotor_http::server::Fsm;
 
 use clap::{App, Arg, Format};
 
-use responder::Responder;
+use responder::{Context, Responder};
 
 const DEFAULT_CONFIG: &'static str = "responder.yaml";
 const DEFAULT_ADDR: &'static str = "127.0.0.1";
@@ -43,13 +43,18 @@ fn main() {
             .value_name("PORT")
             .help("Port to listen for connections")
             .validator(port_validator))
+        .arg(Arg::with_name("reload")
+            .short("r")
+            .long("reload")
+            .help("Reload configuration file on every request"))
         .get_matches();
 
     let addr = matches.value_of("address");
     let port: Option<u16> = matches.value_of("port").map(|p| p.parse().unwrap());
     let config = matches.value_of("config").map(|c| Path::new(c)).unwrap();
+    let reload = matches.is_present("reload");
 
-    match make_server(addr, port, config) {
+    match make_server(addr, port, config, reload) {
         Ok(loop_inst) => {
             loop_inst.run().unwrap();
         }
@@ -73,10 +78,10 @@ fn port_validator(arg: String) -> Result<(), String> {
         .map_err(|_| String::from("invalid port"))
 }
 
-fn make_server(addr: Option<&str>, port: Option<u16>, config: &Path)
+fn make_server(addr: Option<&str>, port: Option<u16>, config_file: &Path, reload: bool)
     -> Result<LoopInstance<Fsm<Responder, TcpListener>>, String>
 {
-    let config = try!(responder::read_config(config));
+    let config = try!(responder::read_config(config_file));
 
     let addr = try!(
         addr.or(config.settings.address.as_ref().map(|a| &**a))
@@ -88,7 +93,7 @@ fn make_server(addr: Option<&str>, port: Option<u16>, config: &Path)
     let port = port.or(config.settings.port)
         .unwrap_or(DEFAULT_PORT);
 
-    let context = try!(responder::build_context(config));
+    let context = try!(Context::from_config(config, config_file, reload));
 
     println!("Starting http server on http://{}:{}/", &addr, &port);
     let event_loop = rotor::Loop::new(&rotor::Config::new()).unwrap();
