@@ -40,13 +40,14 @@ impl Handler {
 
     pub fn handle(&self, res: &mut Response) {
         res.status(self.status_code, &self.status_text);
-        match &self.response {
-            &Some(ref data) => {
+        match self.response {
+            Some(ref data) => {
                 res.add_length(data.len() as u64).unwrap();
                 write_headers(&self.headers, res);
                 res.write_body(data.as_bytes());
             }
-            &None => {
+            None => {
+                res.add_length(0).unwrap();
                 write_headers(&self.headers, res);
             }
         }

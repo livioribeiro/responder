@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use super::server::{Context};
 use super::handler::Handler;
 use super::config::Config;
@@ -76,30 +78,54 @@ fn description(status: u16) -> &'static str {
     "[Unknown HTTP Status]"
 }
 
+fn process_headers(handler: &mut Handler,
+                   route_headers: &BTreeMap<String, String>,
+                   settings_headers: &BTreeMap<String, String>,
+                   replace: bool)
+{
+    if replace {
+        let iter = route_headers.iter().filter(|&(ref k, _)| {
+            !settings_headers.contains_key(k.to_owned())
+        }).chain(settings_headers.iter());
+        for (key, val) in iter {
+            let header = val.as_bytes().iter().map(|b| *b).collect();
+            handler.add_header(key.clone(), header);
+        }
+    } else {
+        for (key, val) in route_headers.iter().chain(settings_headers.iter()) {
+            let header = val.as_bytes().iter().map(|b| *b).collect();
+            handler.add_header(key.clone(), header);
+        }
+    };
+}
+
 pub fn build_context(configuration: Config) -> Result<Context, String> {
     let mut context = Context::new();
 
     for (path, route) in configuration.routes.iter() {
-        for (method, settings) in route.iter() {
-            let status_code = settings.code;
-            let status_text = settings.status
-                .as_ref()
+        for (method, route_config) in route.iter() {
+            let status_code = route_config.code;
+            let status_text = route_config.status.as_ref()
                 .map(|x| x.clone())
                 .unwrap_or(description(status_code).to_owned());
 
             let mut handler = Handler::new(status_code, status_text);
 
-            if settings.data.is_some() {
-                handler.set_data(settings.data.clone());
+            if route_config.data.is_some() {
+                handler.set_data(route_config.data.clone());
+
+                let content_type = route_config.contenttype.as_ref()
+                    .map(|x| &**x)
+                    .unwrap_or(configuration.settings.contenttype.as_ref())
+                    .as_bytes().iter().map(|b| *b).collect();
+
+                handler.add_header("Content-Type".to_owned(), content_type);
             }
 
-            for (k, v) in settings.headers.iter() {
-                handler.add_header(k.clone(), v.as_bytes().iter().map(|b| *b).collect());
-            }
-
-            let content_type = settings.contenttype.clone().unwrap_or("application/json".to_owned());
-            handler.add_header("Content-Type".to_owned(),
-                               content_type.as_bytes().iter().map(|b| *b).collect());
+            process_headers(&mut handler,
+                            &route_config.headers,
+                            &configuration.settings.headers,
+                            configuration.settings.headers_replace);
 
             let path = if !path.ends_with("$") {
                 format!("{}$", path)

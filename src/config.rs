@@ -4,6 +4,8 @@ use std::path::Path;
 use quire;
 use quire::validate as V;
 
+const DEFAULT_CONTENT_TYPE: &'static str = "application/json";
+
 #[derive(RustcDecodable, Debug)]
 pub struct Route {
     pub code: u16,
@@ -23,10 +25,13 @@ pub struct NotFound {
     pub data: Option<String>,
 }
 
-#[derive(RustcDecodable, Debug, Default)]
+#[derive(RustcDecodable, Debug)]
 pub struct Settings {
     pub address: Option<String>,
     pub port: Option<u16>,
+    pub contenttype: String,
+    pub headers: BTreeMap<String, String>,
+    pub headers_replace: bool,
 }
 
 #[derive(RustcDecodable, Debug)]
@@ -41,19 +46,22 @@ pub fn validator<'a>() -> V::Structure<'a> {
         V::Scalar::new(), V::Mapping::new(V::Scalar::new(), V::Structure::new()
             .member("code", V::Numeric::new())
             .member("status", V::Scalar::new().optional())
-            .member("contenttype", V::Scalar::new().optional().default("application/json"))
+            .member("contenttype", V::Scalar::new().optional())
             .member("headers", V::Mapping::new(V::Scalar::new(), V::Scalar::new()))
-            .member("data", V::Scalar::new().optional().default(""))));
+            .member("data", V::Scalar::new().optional())));
 
     let not_found = V::Structure::new()
         .member("status", V::Scalar::new().optional())
-        .member("contenttype", V::Scalar::new().optional().default("application/json"))
+        .member("contenttype", V::Scalar::new().optional())
         .member("headers", V::Mapping::new(V::Scalar::new(), V::Scalar::new()))
-        .member("data", V::Scalar::new().optional().default(""));
+        .member("data", V::Scalar::new().optional());
 
     let settings = V::Structure::new()
         .member("address", V::Scalar::new().optional())
-        .member("port", V::Numeric::new().optional());
+        .member("port", V::Numeric::new().optional())
+        .member("contenttype", V::Scalar::new().optional().default(DEFAULT_CONTENT_TYPE))
+        .member("headers", V::Mapping::new(V::Scalar::new(), V::Scalar::new()))
+        .member("headers_replace", V::Scalar::new().optional().default(false));
 
     V::Structure::new()
         .member("routes", routes)
