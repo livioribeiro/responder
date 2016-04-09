@@ -101,18 +101,18 @@ fn process_headers(handler: &mut Handler,
 
 pub fn build_context(context: &mut Context, configuration: Config) -> Result<(), String> {
     for (path, route) in configuration.routes.iter() {
-        for (method, route_config) in route.iter() {
-            let status_code = route_config.code;
-            let status_text = route_config.status.as_ref()
+        for (method, handler_config) in route.handlers() {
+            let status_code = handler_config.code;
+            let status_text = handler_config.status.as_ref()
                 .map(|x| x.clone())
                 .unwrap_or(description(status_code).to_owned());
 
             let mut handler = Handler::new(status_code, status_text);
 
-            if route_config.data.is_some() {
-                handler.set_data(route_config.data.clone());
+            if handler_config.data.is_some() {
+                handler.set_data(handler_config.data.clone());
 
-                let content_type = route_config.contenttype.as_ref()
+                let content_type = handler_config.contenttype.as_ref()
                     .map(|x| &**x)
                     .unwrap_or(configuration.settings.contenttype.as_ref())
                     .as_bytes().iter().map(|b| *b).collect();
@@ -121,7 +121,7 @@ pub fn build_context(context: &mut Context, configuration: Config) -> Result<(),
             }
 
             process_headers(&mut handler,
-                            &route_config.headers,
+                            &handler_config.headers,
                             &configuration.settings.headers,
                             configuration.settings.headers_replace);
 
@@ -130,7 +130,7 @@ pub fn build_context(context: &mut Context, configuration: Config) -> Result<(),
             } else {
                 path.clone()
             };
-            try!(context.add_route(&path, method.clone(), handler)
+            try!(context.add_route(&path, method.to_owned(), handler)
                 .map_err(|e| format!("Error adding route: {}", e)));
         }
     }

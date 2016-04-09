@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use quire;
 use quire::validate as V;
@@ -7,15 +7,56 @@ use quire::validate as V;
 const DEFAULT_CONTENT_TYPE: &'static str = "application/json";
 
 #[derive(RustcDecodable, Debug)]
-pub struct Route {
+pub struct Handler {
     pub code: u16,
     pub status: Option<String>,
     pub contenttype: Option<String>,
     pub headers: BTreeMap<String, String>,
     pub data: Option<String>,
+    pub datafile: Option<PathBuf>,
 }
 
-pub type MethodRoute = BTreeMap<String, Route>;
+#[derive(RustcDecodable, Debug)]
+#[allow(non_snake_case)]
+pub struct Route {
+    pub include: Option<PathBuf>,
+    pub GET: Option<Handler>,
+    pub HEAD: Option<Handler>,
+    pub POST: Option<Handler>,
+    pub PUT: Option<Handler>,
+    pub DELETE: Option<Handler>,
+    pub TRACE: Option<Handler>,
+    pub OPTIONS: Option<Handler>,
+    pub CONNECT: Option<Handler>,
+    pub PATCH: Option<Handler>,
+}
+
+macro_rules! method_handler {
+    ( $h:ident, $([$m:expr; $e:expr]),+ ) => {
+        $(
+            if let Some(ref handler) = $m {
+                $h.push(($e, handler));
+            }
+        )*
+    }
+}
+
+impl Route {
+    pub fn handlers(&self) -> Vec<(&str, &Handler)> {
+        let mut handler_list = Vec::new();
+        method_handler!(handler_list,
+                        [self.GET; "GET"],
+                        [self.HEAD; "HEAD"],
+                        [self.POST; "POST"],
+                        [self.PUT; "PUT"],
+                        [self.DELETE; "DELETE"],
+                        [self.TRACE; "TRACE"],
+                        [self.OPTIONS; "OPTIONS"],
+                        [self.CONNECT; "CONNECT"],
+                        [self.PATCH; "PATCH"]);
+        handler_list
+    }
+}
 
 #[derive(RustcDecodable, Debug)]
 pub struct NotFound {
@@ -36,19 +77,37 @@ pub struct Settings {
 
 #[derive(RustcDecodable, Debug)]
 pub struct Config {
-    pub routes: BTreeMap<String, MethodRoute>,
+    pub routes: BTreeMap<String, Route>,
     pub notfound: Option<NotFound>,
     pub settings: Settings,
 }
 
-pub fn validator<'a>() -> V::Structure<'a> {
-    let routes = V::Mapping::new(
-        V::Scalar::new(), V::Mapping::new(V::Scalar::new(), V::Structure::new()
+macro_rules! handler {
+    () => {
+        V::Structure::new()
             .member("code", V::Numeric::new())
             .member("status", V::Scalar::new().optional())
             .member("contenttype", V::Scalar::new().optional())
             .member("headers", V::Mapping::new(V::Scalar::new(), V::Scalar::new()))
-            .member("data", V::Scalar::new().optional())));
+            .member("data", V::Scalar::new().optional())
+            .member("datafile", V::Scalar::new().optional())
+    }
+}
+
+pub fn validator<'a>() -> V::Structure<'a> {
+    let route = V::Structure::new()
+        .member("include", V::Scalar::new().optional())
+        .member("GET", handler!().optional())
+        .member("HEAD", handler!().optional())
+        .member("POST", handler!().optional())
+        .member("PUT", handler!().optional())
+        .member("DELETE", handler!().optional())
+        .member("TRACE", handler!().optional())
+        .member("OPTIONS", handler!().optional())
+        .member("CONNECT", handler!().optional())
+        .member("PATCH", handler!().optional());
+
+    let route_collection = V::Mapping::new(V::Scalar::new(), route);
 
     let not_found = V::Structure::new()
         .member("status", V::Scalar::new().optional())
@@ -64,7 +123,7 @@ pub fn validator<'a>() -> V::Structure<'a> {
         .member("headers_replace", V::Scalar::new().optional().default(false));
 
     V::Structure::new()
-        .member("routes", routes)
+        .member("routes", route_collection)
         .member("notfound", not_found)
         .member("settings", settings)
 }
