@@ -2,22 +2,18 @@ routes:
   /:
     GET:
       code: 200
-      data: '{ "name": "value" }'
-      headers:
-        X-Powered-By: java
+      # content: !Data '{ "name": "value" }'
+      content: !DataFile response.json
     POST:
       code: 201
   /foo/(\d+?):
     GET:
       code: 200
-      data: '{ "foo": ["bar", "baz"] }'
+      content: !Data '{ "foo": ["bar", "baz"] }'
 
 notfound:
-  data: '{ "status": "not found" }'
+  content: !Data '{ "status": "not found" }'
 
 settings:
   address: 0.0.0.0 # default 127.0.0.1
   port: 8000 # default 7000
-  headers_replace: true
-  headers:
-    X-Powered-By: rust

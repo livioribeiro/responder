@@ -38,6 +38,16 @@ fn send_not_found(res: &mut Response) {
     res.done();
 }
 
+fn send_error(res: &mut Response, data: &str) {
+    let data = data.as_bytes();
+    res.status(500, "Internal Server Error");
+    res.add_length(data.len() as u64).unwrap();
+    res.add_header("Content-Type", b"text/plain").unwrap();
+    res.done_headers().unwrap();
+    res.write_body(data);
+    res.done();
+}
+
 impl Server for Responder {
     type Seed = ();
     type Context = Context;
@@ -68,17 +78,18 @@ impl Server for Responder {
         scope: &mut Scope<Context>)
         -> Option<Self>
     {
-        match self {
+        let result = match self {
             Responder::Respond(handler) => {
-                handler.handle(res);
+                handler.handle(res)
             },
             Responder::NotFound => {
                 match scope.not_found_handler() {
                     Some(ref handler) => handler.handle(res),
-                    None => send_not_found(res),
+                    None => { send_not_found(res); Ok(()) },
                 }
             }
-        }
+        };
+        result.map_err(|e| send_error(res, &e)).ok();
 
         None
     }

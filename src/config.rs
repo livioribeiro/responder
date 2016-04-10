@@ -6,14 +6,19 @@ use quire::validate as V;
 
 const DEFAULT_CONTENT_TYPE: &'static str = "application/json";
 
+#[derive(RustcDecodable, Clone, Debug)]
+pub enum Content {
+    Data(String),
+    DataFile(PathBuf),
+}
+
 #[derive(RustcDecodable, Debug)]
 pub struct Handler {
     pub code: u16,
     pub status: Option<String>,
     pub contenttype: Option<String>,
     pub headers: BTreeMap<String, String>,
-    pub data: Option<String>,
-    pub datafile: Option<PathBuf>,
+    pub content: Option<Content>,
 }
 
 #[derive(RustcDecodable, Debug)]
@@ -63,7 +68,7 @@ pub struct NotFound {
     pub status: Option<String>,
     pub contenttype: Option<String>,
     pub headers: BTreeMap<String, String>,
-    pub data: Option<String>,
+    pub content: Option<Content>,
 }
 
 #[derive(RustcDecodable, Debug)]
@@ -89,8 +94,11 @@ macro_rules! handler {
             .member("status", V::Scalar::new().optional())
             .member("contenttype", V::Scalar::new().optional())
             .member("headers", V::Mapping::new(V::Scalar::new(), V::Scalar::new()))
-            .member("data", V::Scalar::new().optional())
-            .member("datafile", V::Scalar::new().optional())
+            .member("content", V::Enum::new()
+                .optional()
+                .default_tag("Data")
+                .option("Data", V::Scalar::new())
+                .option("DataFile", V::Scalar::new()))
     }
 }
 
@@ -113,7 +121,11 @@ pub fn validator<'a>() -> V::Structure<'a> {
         .member("status", V::Scalar::new().optional())
         .member("contenttype", V::Scalar::new().optional())
         .member("headers", V::Mapping::new(V::Scalar::new(), V::Scalar::new()))
-        .member("data", V::Scalar::new().optional());
+        .member("content", V::Enum::new()
+            .optional()
+            .default_tag("Data")
+            .option("Data", V::Scalar::new())
+            .option("DataFile", V::Scalar::new()));
 
     let settings = V::Structure::new()
         .member("address", V::Scalar::new().optional())

@@ -1,4 +1,9 @@
+use std::fs::File;
+use std::io::Read;
+
 use rotor_http::server::Response;
+
+use super::config::Content;
 
 type Headers = Vec<(String, Vec<u8>)>;
 
@@ -6,7 +11,7 @@ type Headers = Vec<(String, Vec<u8>)>;
 pub struct Handler {
     status_code: u16,
     status_text: String,
-    response: Option<String>,
+    content: Option<Content>,
     headers: Headers,
 }
 
@@ -15,18 +20,13 @@ impl Handler {
         Handler {
             status_code: status_code,
             status_text: status_text,
-            response: None,
+            content: None,
             headers: Headers::new(),
         }
     }
 
-    pub fn with_data(mut self, data: String) -> Self {
-        self.response = Some(data);
-        self
-    }
-
-    pub fn set_data(&mut self, data: Option<String>) {
-        self.response = data;
+    pub fn set_content(&mut self, content: Option<Content>) {
+        self.content = content;
     }
 
     pub fn add_header(&mut self, name: String, value: Vec<u8>) {
@@ -38,13 +38,33 @@ impl Handler {
         self
     }
 
-    pub fn handle(&self, res: &mut Response) {
+    pub fn handle(&self, res: &mut Response) -> Result<(), String> {
         res.status(self.status_code, &self.status_text);
-        match self.response {
-            Some(ref data) => {
+        match self.content {
+            Some(Content::Data(ref data)) => {
                 res.add_length(data.len() as u64).unwrap();
                 write_headers(&self.headers, res);
                 res.write_body(data.as_bytes());
+            }
+            Some(Content::DataFile(ref path)) => {
+                try!(File::open(path)
+                    .and_then(|file| {
+                        let metadata = try!(file.metadata());
+                        res.add_length(metadata.len()).unwrap();
+                        write_headers(&self.headers, res);
+                        Ok(file)
+                    })
+                    .and_then(|mut file| {
+                        let mut buf = [0u8; 1024];
+                        let mut bytes_read = try!(file.read(&mut buf));
+                        while bytes_read > 0 {
+                            res.write_body(&buf[..bytes_read]);
+                            bytes_read = try!(file.read(&mut buf));
+                        }
+                        Ok(())
+                    })
+                    .map_err(|e| format!("{}", e))
+                );
             }
             None => {
                 res.add_length(0).unwrap();
@@ -52,6 +72,8 @@ impl Handler {
             }
         }
         res.done();
+
+        Ok(())
     }
 }
 

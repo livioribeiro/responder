@@ -108,10 +108,9 @@ pub fn build_context(context: &mut Context, configuration: Config) -> Result<(),
                 .unwrap_or(description(status_code).to_owned());
 
             let mut handler = Handler::new(status_code, status_text);
+            handler.set_content(handler_config.content.clone());
 
-            if handler_config.data.is_some() {
-                handler.set_data(handler_config.data.clone());
-
+            if handler_config.content.is_some() {
                 let content_type = handler_config.contenttype.as_ref()
                     .map(|x| &**x)
                     .unwrap_or(configuration.settings.contenttype.as_ref())
@@ -143,9 +142,15 @@ pub fn build_context(context: &mut Context, configuration: Config) -> Result<(),
                 .unwrap_or(description(404).to_owned());
 
             let mut handler = Handler::new(404, status_text);
+            handler.set_content(not_found.content.clone());
 
-            if not_found.data.is_some() {
-                handler.set_data(not_found.data.clone());
+            if not_found.content.is_some() {
+                let content_type = not_found.contenttype.as_ref()
+                    .map(|x| &**x)
+                    .unwrap_or(configuration.settings.contenttype.as_ref())
+                    .as_bytes().iter().map(|b| *b).collect();
+
+                handler.add_header("Content-Type".to_owned(), content_type);
             }
 
             for (k, v) in not_found.headers.iter() {
