@@ -23,8 +23,7 @@ pub struct Handler {
 
 #[derive(RustcDecodable, Debug)]
 #[allow(non_snake_case)]
-pub struct Route {
-    pub include: Option<PathBuf>,
+pub struct MethodHandler {
     pub GET: Option<Handler>,
     pub HEAD: Option<Handler>,
     pub POST: Option<Handler>,
@@ -46,7 +45,7 @@ macro_rules! method_handler {
     }
 }
 
-impl Route {
+impl MethodHandler {
     pub fn handlers(&self) -> Vec<(&str, &Handler)> {
         let mut handler_list = Vec::new();
         method_handler!(handler_list,
@@ -61,6 +60,12 @@ impl Route {
                         [self.PATCH; "PATCH"]);
         handler_list
     }
+}
+
+#[derive(RustcDecodable, Debug)]
+pub enum Route {
+    Include(PathBuf),
+    Handler(MethodHandler),
 }
 
 #[derive(RustcDecodable, Debug)]
@@ -95,35 +100,27 @@ macro_rules! handler {
             .member("contenttype", V::Scalar::new().optional())
             .member("headers", V::Mapping::new(V::Scalar::new(), V::Scalar::new()))
             .member("content", V::Enum::new()
-                .optional()
-                .default_tag("Data")
+                .optional().default_tag("Data")
                 .option("Data", V::Scalar::new())
                 .option("DataFile", V::Scalar::new()))
     }
 }
 
-pub fn validator<'a>() -> V::Structure<'a> {
-    let route = V::Structure::new()
-        .member("include", V::Scalar::new().optional())
-        .member("GET", handler!().optional())
-        .member("HEAD", handler!().optional())
-        .member("POST", handler!().optional())
-        .member("PUT", handler!().optional())
-        .member("DELETE", handler!().optional())
-        .member("TRACE", handler!().optional())
-        .member("OPTIONS", handler!().optional())
-        .member("CONNECT", handler!().optional())
-        .member("PATCH", handler!().optional());
+pub fn read_config(filename: &Path) -> Result<Config, String> {
+    quire::parse_config(filename, &validator(), Default::default())
+}
 
-    let route_collection = V::Mapping::new(V::Scalar::new(), route);
+pub fn read_config_include(filename: &Path) -> Result<BTreeMap<String, Route>, String> {
+    quire::parse_config(filename, &validator_include(), Default::default())
+}
 
+fn validator<'a>() -> V::Structure<'a> {
     let not_found = V::Structure::new()
         .member("status", V::Scalar::new().optional())
         .member("contenttype", V::Scalar::new().optional())
         .member("headers", V::Mapping::new(V::Scalar::new(), V::Scalar::new()))
         .member("content", V::Enum::new()
-            .optional()
-            .default_tag("Data")
+            .optional().default_tag("Data")
             .option("Data", V::Scalar::new())
             .option("DataFile", V::Scalar::new()));
 
@@ -135,11 +132,29 @@ pub fn validator<'a>() -> V::Structure<'a> {
         .member("headers_replace", V::Scalar::new().optional().default(false));
 
     V::Structure::new()
-        .member("routes", route_collection)
+        .member("routes", route_collection())
         .member("notfound", not_found)
         .member("settings", settings)
 }
 
-pub fn read_config(filename: &Path) -> Result<Config, String> {
-    quire::parse_config(filename, &validator(), Default::default())
+fn validator_include<'a>() -> V::Mapping<'a> {
+    route_collection()
+}
+
+fn route_collection<'a>() -> V::Mapping<'a> {
+    let route = V::Enum::new()
+        .optional().default_tag("Route")
+        .option("Include", V::Scalar::new().optional())
+        .option("Handler", V::Structure::new()
+            .member("GET", handler!().optional())
+            .member("HEAD", handler!().optional())
+            .member("POST", handler!().optional())
+            .member("PUT", handler!().optional())
+            .member("DELETE", handler!().optional())
+            .member("TRACE", handler!().optional())
+            .member("OPTIONS", handler!().optional())
+            .member("CONNECT", handler!().optional())
+            .member("PATCH", handler!().optional()));
+
+    V::Mapping::new(V::Scalar::new(), route)
 }

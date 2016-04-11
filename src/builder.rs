@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
+use std::path::Path;
 
 use super::context::{Context};
 use super::handler::Handler;
-use super::config::Config;
+use super::config::{self, Config, Route, MethodHandler};
 
 const STATUS_CODES: [(u16, &'static str); 62] = [
     (100, "Continue"),
@@ -69,73 +70,83 @@ const STATUS_CODES: [(u16, &'static str); 62] = [
     (599, "Network Connect Timeout Error"),
 ];
 
-fn description(status: u16) -> &'static str {
-    for &(code, description) in STATUS_CODES.iter() {
-        if status == code {
-            return description
-        }
-    }
-    "[Unknown HTTP Status]"
-}
-
-fn process_headers(handler: &mut Handler,
-                   route_headers: &BTreeMap<String, String>,
-                   settings_headers: &BTreeMap<String, String>,
-                   replace: bool)
-{
-    if replace {
-        let iter = route_headers.iter().filter(|&(ref k, _)| {
-            !settings_headers.contains_key(k.to_owned())
-        }).chain(settings_headers.iter());
-        for (key, val) in iter {
-            let header = val.as_bytes().iter().map(|b| *b).collect();
-            handler.add_header(key.clone(), header);
-        }
-    } else {
-        for (key, val) in route_headers.iter().chain(settings_headers.iter()) {
-            let header = val.as_bytes().iter().map(|b| *b).collect();
-            handler.add_header(key.clone(), header);
-        }
-    };
-}
-
 pub fn build_context(context: &mut Context, configuration: Config) -> Result<(), String> {
     for (path, route) in configuration.routes.iter() {
-        for (method, handler_config) in route.handlers() {
-            let status_code = handler_config.code;
-            let status_text = handler_config.status.as_ref()
-                .map(|x| x.clone())
-                .unwrap_or(description(status_code).to_owned());
-
-            let mut handler = Handler::new(status_code, status_text);
-            handler.set_content(handler_config.content.clone());
-
-            if handler_config.content.is_some() {
-                let content_type = handler_config.contenttype.as_ref()
-                    .map(|x| &**x)
-                    .unwrap_or(configuration.settings.contenttype.as_ref())
-                    .as_bytes().iter().map(|b| *b).collect();
-
-                handler.add_header("Content-Type".to_owned(), content_type);
+        match route {
+            &Route::Include(ref filename) =>
+                try!(process_include(filename, path, &configuration, context)),
+            &Route::Handler(ref route_handler) => {
+                try!(process_handler(path, route_handler, &configuration, context));
             }
-
-            process_headers(&mut handler,
-                            &handler_config.headers,
-                            &configuration.settings.headers,
-                            configuration.settings.headers_replace);
-
-            let path = if !path.ends_with("$") {
-                format!("{}$", path)
-            } else {
-                path.clone()
-            };
-            try!(context.add_route(&path, method.to_owned(), handler)
-                .map_err(|e| format!("Error adding route: {}", e)));
         }
     }
 
+    process_notfound(&configuration, context);
+
+    Ok(())
+}
+
+fn process_include(filename: &Path, root_path: &str, configuration: &Config, context: &mut Context)
+    -> Result<(), String>
+{
+    let include_config = try!(config::read_config_include(filename));
+    for (path, route) in include_config.iter() {
+        let path = format!("{}/{}", root_path.trim_right_matches("/"),
+                                    path.trim_left_matches("/"));
+
+        match route {
+            &Route::Include(ref filename) => try!(process_include(filename, &path, configuration, context)),
+            &Route::Handler(ref route_handler) => {
+                try!(process_handler(&path, route_handler, &configuration, context));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn process_handler(path: &str,
+                   route: &MethodHandler,
+                   configuration: &Config,
+                   context: &mut Context)
+                   -> Result<(), String>
+{
+    for (method, handler_config) in route.handlers() {
+        let status_code = handler_config.code;
+        let status_text = handler_config.status.as_ref()
+            .map(|x| x.clone())
+            .unwrap_or(description(status_code).to_owned());
+
+        let mut handler = Handler::new(status_code, status_text);
+        handler.set_content(handler_config.content.clone());
+
+        if handler_config.content.is_some() {
+            let content_type = handler_config.contenttype.as_ref()
+                .map(|x| &**x)
+                .unwrap_or(configuration.settings.contenttype.as_ref())
+                .as_bytes().iter().map(|b| *b).collect();
+
+            handler.add_header("Content-Type".to_owned(), content_type);
+        }
+
+        process_headers(&mut handler,
+                        &handler_config.headers,
+                        &configuration.settings.headers,
+                        configuration.settings.headers_replace);
+
+        let path = if !path.ends_with("$") {
+            format!("{}$", path)
+        } else {
+            path.to_owned()
+        };
+        try!(context.add_route(&path, method.to_owned(), handler)
+            .map_err(|e| format!("Error adding route: {}", e)));
+    }
+    Ok(())
+}
+
+fn process_notfound(configuration: &Config, context: &mut Context) {
     match configuration.notfound {
-        Some(not_found) => {
+        Some(ref not_found) => {
             let status_text = not_found.status
                 .as_ref()
                 .map(|x| x.clone())
@@ -165,6 +176,34 @@ pub fn build_context(context: &mut Context, configuration: Config) -> Result<(),
         }
         None => {}
     }
+}
 
-    Ok(())
+fn description(status: u16) -> &'static str {
+    for &(code, description) in STATUS_CODES.iter() {
+        if status == code {
+            return description
+        }
+    }
+    "[Unknown HTTP Status]"
+}
+
+fn process_headers(handler: &mut Handler,
+                   route_headers: &BTreeMap<String, String>,
+                   settings_headers: &BTreeMap<String, String>,
+                   replace: bool)
+{
+    if replace {
+        let iter = route_headers.iter().filter(|&(ref k, _)| {
+            !settings_headers.contains_key(k.to_owned())
+        }).chain(settings_headers.iter());
+        for (key, val) in iter {
+            let header = val.as_bytes().iter().map(|b| *b).collect();
+            handler.add_header(key.clone(), header);
+        }
+    } else {
+        for (key, val) in route_headers.iter().chain(settings_headers.iter()) {
+            let header = val.as_bytes().iter().map(|b| *b).collect();
+            handler.add_header(key.clone(), header);
+        }
+    };
 }

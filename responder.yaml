@@ -1,15 +1,16 @@
 routes:
-  /:
+  /: !Handler
     GET:
       code: 200
       # content: !Data '{ "name": "value" }'
       content: !DataFile response.json
     POST:
       code: 201
-  /foo/(\d+?):
+  /foo/(\d+?): !Handler
     GET:
       code: 200
       content: !Data '{ "foo": ["bar", "baz"] }'
+  /inc: !Include included.yaml
 
 notfound:
   content: !Data '{ "status": "not found" }'

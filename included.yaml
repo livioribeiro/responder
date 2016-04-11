@@ -1,0 +1,4 @@
+/foo: !Handler
+  GET:
+    code: 200
+    content: !Data '{ "foo": "bar" }'
