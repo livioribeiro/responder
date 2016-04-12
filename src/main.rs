@@ -18,11 +18,12 @@ use responder::{Context, Responder};
 
 const DEFAULT_CONFIG: &'static str = "responder.yaml";
 const DEFAULT_ADDR: &'static str = "127.0.0.1";
-const DEFAULT_PORT: u16 = 7000;
+const DEFAULT_PORT: &'static str = "7000";
+const DEFAULT_PORT_VALUE: u16 = 7000;
 
 fn main() {
     let matches = App::new("Responder")
-        .version("1.0")
+        .version(crate_version!())
         .author("Livio Ribeiro <livioribeiro@outlook.com>")
         .about("Web server generator used to serve static responses")
         .arg(Arg::with_name("config")
@@ -30,27 +31,44 @@ fn main() {
             .long("config")
             .value_name("FILE")
             .help("Config file used to generate the server")
-            .default_value(DEFAULT_CONFIG))
+            .default_value(DEFAULT_CONFIG)
+            .display_order(1))
         .arg(Arg::with_name("address")
             .short("a")
             .long("address")
             .value_name("ADDRESS")
             .help("Address to listen for connections")
-            .validator(addr_validator))
+            .validator(addr_validator)
+            .default_value(DEFAULT_ADDR)
+            .display_order(2))
         .arg(Arg::with_name("port")
             .short("p")
             .long("port")
             .value_name("PORT")
             .help("Port to listen for connections")
-            .validator(port_validator))
+            .validator(port_validator)
+            .default_value(DEFAULT_PORT)
+            .display_order(3))
         .arg(Arg::with_name("reload")
             .short("r")
             .long("reload")
-            .help("Reload configuration file on every request"))
+            .help("Reload configuration file on every request")
+            .display_order(4))
         .get_matches();
 
-    let addr = matches.value_of("address");
-    let port: Option<u16> = matches.value_of("port").map(|p| p.parse().unwrap());
+    let addr = if matches.occurrences_of("address") > 0 {
+        matches.value_of("address")
+    } else {
+        None
+    };
+
+    let port: Option<u16> = if matches.occurrences_of("port") > 0 {
+        let port = value_t!(matches, "port", u16).unwrap_or_else(|e| e.exit());
+        Some(port)
+    } else {
+        None
+    };
+
     let config = matches.value_of("config").map(|c| Path::new(c)).unwrap();
     let reload = matches.is_present("reload");
 
@@ -91,7 +109,7 @@ fn make_server(addr: Option<&str>, port: Option<u16>, config_file: &Path, reload
     );
 
     let port = port.or(config.settings.port)
-        .unwrap_or(DEFAULT_PORT);
+        .unwrap_or(DEFAULT_PORT_VALUE);
 
     let context = try!(Context::from_config(config, config_file, reload));
 

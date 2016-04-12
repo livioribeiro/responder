@@ -1,6 +1,21 @@
 # Responder
 
-Create fake web servers to help develop client applications.
+Web server generator used to serve static responses.
+
+```
+USAGE:
+    responder [FLAGS] [OPTIONS]
+
+FLAGS:
+    -r, --reload     Reload configuration file on every request
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+
+OPTIONS:
+    -c, --config <FILE>        Config file used to generate the server [default: responder.yaml]
+    -a, --address <ADDRESS>    Address to listen for connections [default: 127.0.0.1]
+    -p, --port <PORT>          Port to listen for connections [default: 7000]
+```
 
 Server is generated from yaml file (default `responder.yaml`), for example:
 
@@ -40,3 +55,49 @@ Included file `included.yaml` would look like:
 ```
 
 The paths in `included.yaml` will be prepended with the path which included it.
+
+## `responder.yaml` structure
+
+### routes
+
+A mapping of paths and their respective handlers.
+
+Handlers are defined using the "!Handler" yaml tag or can import their definition from another file using the "!Include" yaml tag.
+
+#### !Handler
+
+Consists of a mapping of HTTP methods and the response definition, which have the following keys:
+
+* code (required): Status code
+* status (optional, guessed from code): Status text
+* contenttype (optional, default `application/json`): Content type of the response
+* headers (optional): Response headers
+* content (optional): Content to be sent
+
+`content` can be one of the following values:
+
+!Data     | String to be sent as response
+----------|--------------------------------
+!DataFile | Read response content from file
+
+Example:
+
+```yaml
+routes:
+  /:
+    GET: !Handler
+      code: 200
+      header:
+        X-Powered-By: rust
+      content: !Data '{ "data": "value" }'
+  /file:
+    GET: !Handler
+      code: 200
+      content: !DataFile content.json
+```
+
+#### !Include
+
+Import configuration from another file.
+
+Structure of the imported file should be the same as the `routes` section of the main file.

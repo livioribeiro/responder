@@ -113,6 +113,7 @@ impl Server for Responder {
     {
         unimplemented!();
     }
+    
     fn wakeup(self, _response: &mut Response, _scope: &mut Scope<Context>)
         -> Option<Self>
     {
