@@ -46,7 +46,7 @@ impl Handler {
                 write_headers(&self.headers, res);
                 res.write_body(data.as_bytes());
             }
-            Some(Content::DataFile(ref path)) => {
+            Some(Content::File(ref path)) => {
                 try!(File::open(path)
                     .and_then(|file| {
                         let metadata = try!(file.metadata());

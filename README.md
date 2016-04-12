@@ -34,7 +34,7 @@ routes:
   /bar: !Handler
     GET:
       code: 200
-      content: !DataFile response.json
+      content: !File response.json
   /inc: !Include included.yaml
 
 notfound:
@@ -76,9 +76,9 @@ Consists of a mapping of HTTP methods and the response definition, which have th
 
 `content` can be one of the following values:
 
-!Data     | String to be sent as response
-----------|--------------------------------
-!DataFile | Read response content from file
+!Data | String to be sent as response
+------|------------------------------
+!File | File to be send as response
 
 Example:
 
@@ -87,13 +87,15 @@ routes:
   /:
     GET: !Handler
       code: 200
+      status: Ok
+      contenttype: application/json
       header:
         X-Powered-By: rust
       content: !Data '{ "data": "value" }'
   /file:
     GET: !Handler
       code: 200
-      content: !DataFile content.json
+      content: !File content.json
 ```
 
 #### !Include

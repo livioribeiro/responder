@@ -9,7 +9,7 @@ const DEFAULT_CONTENT_TYPE: &'static str = "application/json";
 #[derive(RustcDecodable, Clone, Debug)]
 pub enum Content {
     Data(String),
-    DataFile(PathBuf),
+    File(PathBuf),
 }
 
 #[derive(RustcDecodable, Debug)]
@@ -102,7 +102,7 @@ macro_rules! handler {
             .member("content", V::Enum::new()
                 .optional().default_tag("Data")
                 .option("Data", V::Scalar::new())
-                .option("DataFile", V::Scalar::new()))
+                .option("File", V::Scalar::new()))
     }
 }
 
@@ -122,7 +122,7 @@ fn validator<'a>() -> V::Structure<'a> {
         .member("content", V::Enum::new()
             .optional().default_tag("Data")
             .option("Data", V::Scalar::new())
-            .option("DataFile", V::Scalar::new()));
+            .option("File", V::Scalar::new()));
 
     let settings = V::Structure::new()
         .member("address", V::Scalar::new().optional())
