@@ -193,9 +193,9 @@ fn process_headers(handler: &mut Handler,
                    replace: bool)
 {
     if replace {
-        let iter = route_headers.iter().filter(|&(ref k, _)| {
-            !settings_headers.contains_key(k.to_owned())
-        }).chain(settings_headers.iter());
+        let iter = settings_headers.iter().filter(|&(ref k, _)| {
+            !route_headers.contains_key(k.to_owned())
+        }).chain(route_headers.iter());
         for (key, val) in iter {
             let header = val.as_bytes().iter().map(|b| *b).collect();
             handler.add_header(key.clone(), header);
