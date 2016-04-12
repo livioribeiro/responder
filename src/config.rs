@@ -95,7 +95,7 @@ pub struct Config {
 macro_rules! handler {
     () => {
         V::Structure::new()
-            .member("code", V::Numeric::new())
+            .member("code", V::Numeric::new().optional().default(200))
             .member("status", V::Scalar::new().optional())
             .member("contenttype", V::Scalar::new().optional())
             .member("headers", V::Mapping::new(V::Scalar::new(), V::Scalar::new()))
