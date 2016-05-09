@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 
 use regex::{self, Regex};
+use hyper::method::Method;
 
 use super::builder;
 use super::config::{self, Config};
@@ -10,25 +10,25 @@ use super::handler::Handler;
 #[derive(Debug)]
 pub struct Route {
     re: Regex,
-    method: String,
-    handler: Rc<Handler>,
+    method: Method,
+    handler: Handler,
 }
 
 impl Route {
-    pub fn new(re: Regex, method: String, handler: Handler) -> Self {
+    pub fn new(re: Regex, method: Method, handler: Handler) -> Self {
         Route {
             re: re,
             method: method,
-            handler: Rc::new(handler),
+            handler: handler,
         }
     }
 
-    pub fn is_match(&self, method: &str, path: &str) -> bool {
-        self.method == method && self.re.is_match(path)
+    pub fn is_match(&self, method: &Method, path: &str) -> bool {
+        self.method == *method && self.re.is_match(path)
     }
 
-    pub fn handler(&self) -> Rc<Handler> {
-        self.handler.clone()
+    pub fn handler(&self) -> &Handler {
+        &self.handler
     }
 }
 
@@ -66,7 +66,7 @@ impl Context {
         builder::build_context(self, c)
     }
 
-    pub fn add_route(&mut self, path: &str, method: String, handler: Handler)
+    pub fn add_route(&mut self, path: &str, method: Method, handler: Handler)
         -> Result<(), regex::Error>
     {
         let re = try!(Regex::new(path));

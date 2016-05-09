@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use hyper::method::Method;
 use quire;
 use quire::validate as V;
 
@@ -14,10 +15,9 @@ pub enum Content {
 
 #[derive(RustcDecodable, Debug)]
 pub struct Handler {
-    pub code: u16,
-    pub status: Option<String>,
+    pub status: u16,
     pub contenttype: Option<String>,
-    pub headers: BTreeMap<String, String>,
+    pub headers: BTreeMap<String, Vec<String>>,
     pub content: Option<Content>,
 }
 
@@ -46,18 +46,18 @@ macro_rules! method_handler {
 }
 
 impl MethodHandler {
-    pub fn handlers(&self) -> Vec<(&str, &Handler)> {
+    pub fn handlers(&self) -> Vec<(Method, &Handler)> {
         let mut handler_list = Vec::new();
         method_handler!(handler_list,
-                        [self.GET; "GET"],
-                        [self.HEAD; "HEAD"],
-                        [self.POST; "POST"],
-                        [self.PUT; "PUT"],
-                        [self.DELETE; "DELETE"],
-                        [self.TRACE; "TRACE"],
-                        [self.OPTIONS; "OPTIONS"],
-                        [self.CONNECT; "CONNECT"],
-                        [self.PATCH; "PATCH"]);
+                        [self.GET; Method::Get],
+                        [self.HEAD; Method::Head],
+                        [self.POST; Method::Post],
+                        [self.PUT; Method::Put],
+                        [self.DELETE; Method::Delete],
+                        [self.TRACE; Method::Trace],
+                        [self.OPTIONS; Method::Options],
+                        [self.CONNECT; Method::Connect],
+                        [self.PATCH; Method::Patch]);
         handler_list
     }
 }
@@ -70,9 +70,8 @@ pub enum Route {
 
 #[derive(RustcDecodable, Debug)]
 pub struct NotFound {
-    pub status: Option<String>,
     pub contenttype: Option<String>,
-    pub headers: BTreeMap<String, String>,
+    pub headers: BTreeMap<String, Vec<String>>,
     pub content: Option<Content>,
 }
 
@@ -81,7 +80,7 @@ pub struct Settings {
     pub address: Option<String>,
     pub port: Option<u16>,
     pub contenttype: String,
-    pub headers: BTreeMap<String, String>,
+    pub headers: BTreeMap<String, Vec<String>>,
     pub headers_replace: bool,
 }
 
@@ -95,10 +94,10 @@ pub struct Config {
 macro_rules! handler {
     () => {
         V::Structure::new()
-            .member("code", V::Numeric::new().optional().default(200))
-            .member("status", V::Scalar::new().optional())
+            .member("status", V::Numeric::new().optional().default(200))
             .member("contenttype", V::Scalar::new().optional())
-            .member("headers", V::Mapping::new(V::Scalar::new(), V::Scalar::new()))
+            .member("headers", V::Mapping::new(V::Scalar::new(),
+                V::Sequence::new(V::Scalar::new())))
             .member("content", V::Enum::new()
                 .optional().default_tag("Data")
                 .option("Data", V::Scalar::new())
@@ -116,9 +115,9 @@ pub fn read_config_include(filename: &Path) -> Result<BTreeMap<String, Route>, S
 
 fn validator<'a>() -> V::Structure<'a> {
     let not_found = V::Structure::new()
-        .member("status", V::Scalar::new().optional())
         .member("contenttype", V::Scalar::new().optional())
-        .member("headers", V::Mapping::new(V::Scalar::new(), V::Scalar::new()))
+        .member("headers", V::Mapping::new(V::Scalar::new(),
+            V::Sequence::new(V::Scalar::new())))
         .member("content", V::Enum::new()
             .optional().default_tag("Data")
             .option("Data", V::Scalar::new())
@@ -128,7 +127,8 @@ fn validator<'a>() -> V::Structure<'a> {
         .member("address", V::Scalar::new().optional())
         .member("port", V::Numeric::new().optional())
         .member("contenttype", V::Scalar::new().optional().default(DEFAULT_CONTENT_TYPE))
-        .member("headers", V::Mapping::new(V::Scalar::new(), V::Scalar::new()))
+        .member("headers", V::Mapping::new(V::Scalar::new(),
+            V::Sequence::new(V::Scalar::new())))
         .member("headers_replace", V::Scalar::new().optional().default(false));
 
     V::Structure::new()

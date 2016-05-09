@@ -5,8 +5,7 @@ authors = ["Livio Ribeiro <livioribeiro@outlook.com>"]
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-rotor = "0.6"
-rotor-http = "0.7"
+hyper = "0.9"
 quire = "0.1"
 rustc-serialize = "0.3"
 regex = "0.1"
