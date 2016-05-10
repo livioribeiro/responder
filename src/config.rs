@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use hyper::method::Method;
+use tiny_http::Method;
 use quire;
 use quire::validate as V;
 
@@ -17,7 +17,7 @@ pub enum Content {
 pub struct Handler {
     pub status: u16,
     pub contenttype: Option<String>,
-    pub headers: BTreeMap<String, Vec<String>>,
+    pub headers: BTreeMap<String, String>,
     pub content: Option<Content>,
 }
 
@@ -71,7 +71,7 @@ pub enum Route {
 #[derive(RustcDecodable, Debug)]
 pub struct NotFound {
     pub contenttype: Option<String>,
-    pub headers: BTreeMap<String, Vec<String>>,
+    pub headers: BTreeMap<String, String>,
     pub content: Option<Content>,
 }
 
@@ -80,7 +80,7 @@ pub struct Settings {
     pub address: Option<String>,
     pub port: Option<u16>,
     pub contenttype: String,
-    pub headers: BTreeMap<String, Vec<String>>,
+    pub headers: BTreeMap<String, String>,
     pub headers_replace: bool,
 }
 
@@ -96,8 +96,7 @@ macro_rules! handler {
         V::Structure::new()
             .member("status", V::Numeric::new().optional().default(200))
             .member("contenttype", V::Scalar::new().optional())
-            .member("headers", V::Mapping::new(V::Scalar::new(),
-                V::Sequence::new(V::Scalar::new())))
+            .member("headers", V::Mapping::new(V::Scalar::new(), V::Scalar::new()))
             .member("content", V::Enum::new()
                 .optional().default_tag("Data")
                 .option("Data", V::Scalar::new())
@@ -116,8 +115,7 @@ pub fn read_config_include(filename: &Path) -> Result<BTreeMap<String, Route>, S
 fn validator<'a>() -> V::Structure<'a> {
     let not_found = V::Structure::new()
         .member("contenttype", V::Scalar::new().optional())
-        .member("headers", V::Mapping::new(V::Scalar::new(),
-            V::Sequence::new(V::Scalar::new())))
+        .member("headers", V::Mapping::new(V::Scalar::new(), V::Scalar::new()))
         .member("content", V::Enum::new()
             .optional().default_tag("Data")
             .option("Data", V::Scalar::new())
@@ -127,8 +125,7 @@ fn validator<'a>() -> V::Structure<'a> {
         .member("address", V::Scalar::new().optional())
         .member("port", V::Numeric::new().optional())
         .member("contenttype", V::Scalar::new().optional().default(DEFAULT_CONTENT_TYPE))
-        .member("headers", V::Mapping::new(V::Scalar::new(),
-            V::Sequence::new(V::Scalar::new())))
+        .member("headers", V::Mapping::new(V::Scalar::new(), V::Scalar::new()))
         .member("headers_replace", V::Scalar::new().optional().default(false));
 
     V::Structure::new()

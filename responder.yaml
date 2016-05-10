@@ -3,7 +3,7 @@ routes:
     GET:
       content: !File response.json
     POST:
-      code: 201
+      status: 201
   /foo/(\d+?): !Handler
     GET:
       content: !Data '{ "foo": ["bar", "baz"] }'

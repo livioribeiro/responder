@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use regex::{self, Regex};
-use hyper::method::Method;
+use tiny_http::Method;
 
 use super::builder;
 use super::config::{self, Config};

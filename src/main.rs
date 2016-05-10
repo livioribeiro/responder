@@ -1,5 +1,3 @@
-extern crate rotor;
-extern crate rotor_http;
 extern crate responder;
 #[macro_use] extern crate clap;
 
@@ -8,13 +6,10 @@ use std::net::{IpAddr, SocketAddr};
 use std::path::Path;
 use std::process;
 
-use rotor::LoopInstance;
-use rotor::mio::tcp::TcpListener;
-use rotor_http::server::Fsm;
-
 use clap::{App, Arg, Format};
 
-use responder::{Context, Responder};
+use responder::Context;
+use responder::server;
 
 const DEFAULT_CONFIG: &'static str = "responder.yaml";
 const DEFAULT_ADDR: &'static str = "127.0.0.1";
@@ -72,10 +67,8 @@ fn main() {
     let config = matches.value_of("config").map(|c| Path::new(c)).unwrap();
     let reload = matches.is_present("reload");
 
-    match make_server(addr, port, config, reload) {
-        Ok(loop_inst) => {
-            loop_inst.run().unwrap();
-        }
+    match run_server(addr, port, config, reload) {
+        Ok(_) => {}
         Err(e) => {
             write!(io::stderr(), "{} {}\n", Format::Error("error:"), e)
                 .expect("An error ocurred while processing previous error");
@@ -96,8 +89,8 @@ fn port_validator(arg: String) -> Result<(), String> {
         .map_err(|_| String::from("invalid port"))
 }
 
-fn make_server(addr: Option<&str>, port: Option<u16>, config_file: &Path, reload: bool)
-    -> Result<LoopInstance<Fsm<Responder, TcpListener>>, String>
+fn run_server(addr: Option<&str>, port: Option<u16>, config_file: &Path, reload: bool)
+    -> Result<(), String>
 {
     let config = try!(responder::read_config(config_file));
 
@@ -114,15 +107,8 @@ fn make_server(addr: Option<&str>, port: Option<u16>, config_file: &Path, reload
     let context = try!(Context::from_config(config, config_file, reload));
 
     println!("Starting http server on http://{}:{}/", &addr, &port);
-    let event_loop = rotor::Loop::new(&rotor::Config::new()).unwrap();
-    let mut loop_inst = event_loop.instantiate(context);
 
     let addr = SocketAddr::new(addr, port);
-    let lst = try!(TcpListener::bind(&addr).map_err(|e| format!("{}", e)));
-
-    try!(loop_inst.add_machine_with(|scope| {
-        Fsm::<Responder, _>::new(lst, (), scope)
-    }).map_err(|e| format!("{}", e)));
-
-    Ok(loop_inst)
+    try!(server::run(context, addr));
+    Ok(())
 }

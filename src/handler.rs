@@ -1,25 +1,21 @@
-use std::borrow::Cow;
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::Read;
 
-use hyper::server::Response;
-use hyper::status::StatusCode;
-use hyper::header::{Headers as HyperHeaders, ContentLength};
+use tiny_http::{Request, Response, Header};
 
 use super::config::Content;
 
-pub type HeaderValue = Vec<Vec<u8>>;
-type Headers = Vec<(String, HeaderValue)>;
+type Headers = Vec<(String, String)>;
 
 #[derive(Clone, Debug)]
 pub struct Handler {
-    status: StatusCode,
+    status: u16,
     content: Option<Content>,
     headers: Headers,
 }
 
 impl Handler {
-    pub fn new(status: StatusCode) -> Self {
+    pub fn new(status: u16) -> Self {
         Handler {
             status: status,
             content: None,
@@ -31,56 +27,45 @@ impl Handler {
         self.content = content;
     }
 
-    pub fn add_header(&mut self, name: String, value: HeaderValue) {
+    pub fn add_header(&mut self, name: String, value: String) {
         self.headers.push((name, value));
     }
 
-    pub fn with_header(mut self, name: String, value: HeaderValue) -> Self {
+    pub fn with_header(mut self, name: String, value: String) -> Self {
         self.add_header(name, value);
         self
     }
 
-    pub fn handle(&self, mut res: Response) -> Result<(), String> {
-        *res.status_mut() = self.status.clone();
+    pub fn handle(&self, req: Request) -> Result<(), String> {
         match self.content {
             Some(Content::Data(ref data)) => {
-                res.send(data.as_bytes());
+                let mut response = Response::from_string(data.clone())
+                    .with_status_code(self.status);
+                self.write_headers(&mut response);
+
+                try!(req.respond(response).map_err(|e| format!("{}", e)));
                 return Ok(())
             }
             Some(Content::File(ref path)) => {
-                try!(File::open(path)
-                    .and_then(|file| {
-                        let metadata = try!(file.metadata());
-                        res.headers_mut().set(ContentLength(metadata.len()));
-                        write_headers(&self.headers, res.headers_mut());
-                        Ok(file)
-                    })
-                    .and_then(|mut file| {
-                        let mut buf = [0u8; 1024];
-                        let mut bytes_read = try!(file.read(&mut buf));
-                        let mut res = try!(res.start());
-                        while bytes_read > 0 {
-                            res.write(&buf[..bytes_read]);
-                            bytes_read = try!(file.read(&mut buf));
-                        }
+                let file = try!(File::open(path).map_err(|e| format!("{}", e)));
+                let mut response = Response::from_file(file);
+                self.write_headers(&mut response);
 
-                        res.end();
-                        Ok(())
-                    })
-                    .map_err(|e| format!("{}", e))
-                );
+                try!(req.respond(response).map_err(|e| format!("{}", e)));
+                return Ok(())
             }
             None => {
-                write_headers(&self.headers, res.headers_mut());
+                let mut response = Response::empty(self.status);
+                self.write_headers(&mut response);
             }
         }
 
         Ok(())
     }
-}
 
-fn write_headers(headers: &Headers, h: &mut HyperHeaders) {
-    for &(ref k, ref v) in headers.iter() {
-        h.set_raw(k, v.clone());
+    fn write_headers<T: Read>(&self, res: &mut Response<T>) {
+        for &(ref k, ref v) in self.headers.iter() {
+            res.add_header(Header::from_bytes(k.as_bytes(), v.as_bytes()).unwrap());
+        }
     }
 }

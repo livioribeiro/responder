@@ -1,28 +1,37 @@
-use std::cell::RefCell;
-use std::time::Duration;
-use std::sync::Mutex;
+use std::io::Error as IoError;
+use std::net::ToSocketAddrs;
+use std::sync::mpsc::{self, SyncSender, SendError, Receiver, TryRecvError};
+use std::thread;
 
-use hyper::server::{Handler as HyperHandler, Request, Response};
-use hyper::header::{ContentType, ContentLength};
-use hyper::status::StatusCode;
-use hyper::method::Method;
-use hyper::uri::RequestUri;
+use tiny_http::{
+    Server,
+    Request,
+    Response,
+    Header,
+    Method
+};
 
 use super::context::Context;
 use super::handler::Handler;
 
-pub fn send_not_found(res: Response) -> Result<(), String> {
-    let body = b"404 - Page not found";
-    *res.status_mut() = StatusCode::NotFound;
-    res.headers_mut().set(ContentType::json());
-    res.send(body).map_err(|e| format!("{}", e))
+pub fn send_not_found(req: Request) -> Result<(), IoError> {
+    let data = "404 - Page not found";
+
+    let content_type: Header = "Content-Type: text/plain".parse().expect("Invalid header");
+    let response = Response::from_string(data.to_owned())
+        .with_status_code(404)
+        .with_header(content_type);
+
+    req.respond(response)
 }
 
-pub fn send_error(res: Response, data: &str) -> Result<(), String> {
-    let body = data.as_bytes();
-    *res.status_mut() = StatusCode::InternalServerError;
-    res.headers_mut().set(ContentType::plaintext());
-    res.send(body).map_err(|e| format!("{}", e))
+pub fn send_error(req: Request, data: &str) -> Result<(), IoError> {
+    let content_type: Header = "Content-Type: text/plain".parse().expect("Invalid header");
+    let response = Response::from_data(data)
+        .with_status_code(500)
+        .with_header(content_type);
+
+    req.respond(response)
 }
 
 pub trait Router {
@@ -40,40 +49,67 @@ impl Router for Context {
     }
 }
 
-pub struct Responder {
-    context: Mutex<RefCell<Context>>,
-}
+pub struct Guard(SyncSender<()>);
 
-impl Responder {
-    pub fn new(context: Context) -> Responder {
-        Responder {
-            context: Mutex::new(RefCell::new(context))
-        }
+impl Guard {
+    pub fn stop(self) -> Result<(), SendError<()>> {
+        self.0.send(())
     }
 }
 
-impl HyperHandler for Responder {
-    fn handle(&self, req: Request, res: Response) {
-        let context = self.context.lock().unwrap();
-        if context.borrow().reload() {
-            match context.borrow_mut().rebuild() {
-                Ok(_) => {}
-                Err(e) => {
-                    println!("{}", &e);
-                    send_error(res, &e);
-                    return
-                }
-            }
+pub fn start<S>(context: Context, address: S)
+    -> Result<Guard, String>
+    where S: ToSocketAddrs
+{
+    let (tx, rx) = mpsc::sync_channel::<()>(0);
+    let server = try!(Server::http(address).map_err(|e| format!("{}", e)));
+
+    thread::spawn(move || {
+        serve(context, server, rx);
+    });
+
+    Ok(Guard(tx))
+}
+
+pub fn run<S>(context: Context, address: S)
+    -> Result<(), String>
+    where S: ToSocketAddrs
+{
+    let server = try!(Server::http(address).map_err(|e| format!("{}", e)));
+    loop {
+        process_request(&context, &server);
+    }
+}
+
+fn serve(context: Context, server: Server, rx: Receiver<()>) {
+    loop {
+        match rx.try_recv() {
+            Ok(_) | Err(TryRecvError::Disconnected) => break,
+            _ => {}
         }
 
-        let path = match req.uri {
-            RequestUri::AbsolutePath(path) => path,
-            _ => unreachable!(),
-        };
+        process_request(&context, &server)
+    }
+}
 
-        match context.borrow().match_route(&req.method, &path) {
-            None => send_not_found(res).unwrap(),
-            Some(handler) => handler.handle(res).unwrap(),
+fn process_request(context: &Context, server: &Server) {
+    let request = match server.try_recv() {
+        Ok(Some(req)) => req,
+        Ok(None) => return,
+        Err(e) => {
+            println!("Error: {}", e);
+            return
         }
+    };
+
+    if let Some(handler) = context.match_route(request.method(), request.url()) {
+        match handler.handle(request) {
+            Ok(_) => {}
+            Err(e) => println!("Error: {}", e),
+        }
+    } else if let Some(handler) = context.not_found_handler() {
+        handler.handle(request);
+    } else {
+        send_not_found(request);
     }
 }

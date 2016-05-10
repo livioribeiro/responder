@@ -25,7 +25,7 @@ routes:
     GET:
       content: !Data '{ "name": "value" }'
     POST:
-      code: 201
+      status: 201
   /foo/(\d+?): !Handler
     GET:
       content: !Data '{ "foo": "bar" }'
@@ -64,8 +64,7 @@ Handlers are defined using the "!Handler" yaml tag or can import their definitio
 
 Consists of a mapping of HTTP methods and the response definition, which have the following keys:
 
-* code (optional, default `200`): Status code
-* status (optional, guessed from code): Status text
+* status (optional, default `200`): Status code
 * contenttype (optional, default `application/json`): Content type of the response
 * headers (optional): Response headers
 * content (optional): Content to be sent
@@ -83,14 +82,13 @@ Example:
 routes:
   /:
     GET: !Handler
-      code: 200
-      status: Ok
+      status: 200
       contenttype: application/json
       headers:
         X-Powered-By: rust
       content: !Data '{ "data": "value" }'
     POST: !Handler
-      code: 201
+      status: 201
   /file:
     GET: !Handler
       content: !File content.json
@@ -109,7 +107,6 @@ standard handler (without the `code` option). For example:
 
 ```yaml
 notfound:
-  status: Not Found
   contenttype: application/json
   headers:
     X-Powered-By: rust
