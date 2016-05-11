@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::io::{Read, Error as IoError};
+use std::thread;
 
 use tiny_http::{Request, Response, Header};
 
@@ -50,7 +51,14 @@ impl Handler {
                 let mut response = Response::from_file(file);
                 self.write_headers(&mut response);
 
-                req.respond(response)
+                thread::spawn(move || {
+                    match req.respond(response) {
+                        Err(e) => println!("Error: {}", e),
+                        _ => {}
+                    }
+                });
+                
+                Ok(())
             }
             None => {
                 let mut response = Response::empty(self.status);
