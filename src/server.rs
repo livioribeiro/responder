@@ -1,4 +1,5 @@
 use std::io::Error as IoError;
+use std::fmt::{self, Display, Formatter};
 use std::net::ToSocketAddrs;
 use std::sync::mpsc::{self, SyncSender, SendError, Receiver, TryRecvError};
 use std::thread;
@@ -13,6 +14,20 @@ use tiny_http::{
 
 use super::context::Context;
 use super::handler::Handler;
+
+enum ProcessingError {
+    Request(IoError),
+    Response(IoError),
+}
+
+impl Display for ProcessingError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match *self {
+            ProcessingError::Request(ref e)
+            | ProcessingError::Response(ref e) => write!(f, "{}", e)
+        }
+    }
+}
 
 pub fn send_not_found(req: Request) -> Result<(), IoError> {
     let data = "404 - Page not found";
@@ -89,29 +104,31 @@ fn serve(context: Context, server: Server, rx: Receiver<()>) {
         }
 
         match process_request(&context, &server) {
-            Err(e) => {
+            Err(ProcessingError::Request(e)) => {
                 println!("Error: {}", e);
                 break
+            }
+            Err(ProcessingError::Response(e)) => {
+                // Errors in response processing can be tolerated
+                println!("Error: {}", e);
             }
             Ok(_) => {}
         }
     }
 }
 
-fn process_request(context: &Context, server: &Server) -> Result<(), IoError> {
-    let request = match try!(server.try_recv()) {
-        Some(req) => req,
-        None => return Ok(()),
-    };
+fn process_request(context: &Context, server: &Server) -> Result<(), ProcessingError> {
+    let request =
+        match try!(server.try_recv().map_err(|e| ProcessingError::Request(e))) {
+            Some(req) => req,
+            None => return Ok(()),
+        };
 
-    // Errors in the request processing can be tolerated
     if let Some(handler) = context.match_route(request.method(), request.url()) {
-        handler.handle(request).map_err(|e| println!("Error: {}", e)).ok();
+        handler.handle(request).map_err(|e| ProcessingError::Response(e))
     } else if let Some(handler) = context.not_found_handler() {
-        handler.handle(request).map_err(|e| println!("Error: {}", e)).ok();
+        handler.handle(request).map_err(|e| ProcessingError::Response(e))
     } else {
-        send_not_found(request).map_err(|e| println!("Error: {}", e)).ok();
+        send_not_found(request).map_err(|e| ProcessingError::Response(e))
     }
-
-    Ok(())
 }
