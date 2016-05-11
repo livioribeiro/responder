@@ -40,15 +40,6 @@ pub fn send_not_found(req: Request) -> Result<(), IoError> {
     req.respond(response)
 }
 
-pub fn send_error(req: Request, data: &str) -> Result<(), IoError> {
-    let content_type: Header = "Content-Type: text/plain".parse().expect("Invalid header");
-    let response = Response::from_data(data)
-        .with_status_code(500)
-        .with_header(content_type);
-
-    req.respond(response)
-}
-
 pub trait Router {
     fn match_route(&self, method: &Method, path: &str) -> Option<&Handler>;
 }
