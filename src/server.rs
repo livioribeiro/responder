@@ -77,7 +77,7 @@ pub fn run<S>(context: Context, address: S)
 {
     let server = try!(Server::http(address).map_err(|e| format!("{}", e)));
     loop {
-        process_request(&context, &server);
+        try!(process_request(&context, &server).map_err(|e| format!("{}", e)));
     }
 }
 
@@ -88,28 +88,30 @@ fn serve(context: Context, server: Server, rx: Receiver<()>) {
             _ => {}
         }
 
-        process_request(&context, &server)
+        match process_request(&context, &server) {
+            Err(e) => {
+                println!("Error: {}", e);
+                break
+            }
+            Ok(_) => {}
+        }
     }
 }
 
-fn process_request(context: &Context, server: &Server) {
-    let request = match server.try_recv() {
-        Ok(Some(req)) => req,
-        Ok(None) => return,
-        Err(e) => {
-            println!("Error: {}", e);
-            return
-        }
+fn process_request(context: &Context, server: &Server) -> Result<(), IoError> {
+    let request = match try!(server.try_recv()) {
+        Some(req) => req,
+        None => return Ok(()),
     };
 
+    // Errors in the request processing can be tolerated
     if let Some(handler) = context.match_route(request.method(), request.url()) {
-        match handler.handle(request) {
-            Ok(_) => {}
-            Err(e) => println!("Error: {}", e),
-        }
+        handler.handle(request).map_err(|e| println!("Error: {}", e)).ok();
     } else if let Some(handler) = context.not_found_handler() {
-        handler.handle(request);
+        handler.handle(request).map_err(|e| println!("Error: {}", e)).ok();
     } else {
-        send_not_found(request);
+        send_not_found(request).map_err(|e| println!("Error: {}", e)).ok();
     }
+
+    Ok(())
 }

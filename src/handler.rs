@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Error as IoError};
 
 use tiny_http::{Request, Response, Header};
 
@@ -36,31 +36,29 @@ impl Handler {
         self
     }
 
-    pub fn handle(&self, req: Request) -> Result<(), String> {
+    pub fn handle(&self, req: Request) -> Result<(), IoError> {
         match self.content {
             Some(Content::Data(ref data)) => {
                 let mut response = Response::from_string(data.clone())
                     .with_status_code(self.status);
                 self.write_headers(&mut response);
 
-                try!(req.respond(response).map_err(|e| format!("{}", e)));
-                return Ok(())
+                req.respond(response)
             }
             Some(Content::File(ref path)) => {
-                let file = try!(File::open(path).map_err(|e| format!("{}", e)));
+                let file = try!(File::open(path));
                 let mut response = Response::from_file(file);
                 self.write_headers(&mut response);
 
-                try!(req.respond(response).map_err(|e| format!("{}", e)));
-                return Ok(())
+                req.respond(response)
             }
             None => {
                 let mut response = Response::empty(self.status);
                 self.write_headers(&mut response);
+
+                req.respond(response)
             }
         }
-
-        Ok(())
     }
 
     fn write_headers<T: Read>(&self, res: &mut Response<T>) {

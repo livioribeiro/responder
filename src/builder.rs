@@ -7,12 +7,17 @@ use super::config::{self, Config, Route, MethodHandler};
 
 pub fn build_context(context: &mut Context, configuration: Config) -> Result<(), String> {
     for (path, route) in configuration.routes.iter() {
-        let path = format!("^{}", path);
+        let path = if !path.starts_with("^") {
+            format!("^{}", path)
+        } else {
+            path.to_owned()
+        };
+        
         match route {
             &Route::Include(ref filename) =>
-                try!(process_include(filename, &path, &configuration, context)),
+                try!(process_include(filename, path, &configuration, context)),
             &Route::Handler(ref route_handler) => {
-                try!(process_handler(&path, route_handler, &configuration, context));
+                try!(process_handler(path, route_handler, &configuration, context));
             }
         }
     }
@@ -22,30 +27,38 @@ pub fn build_context(context: &mut Context, configuration: Config) -> Result<(),
     Ok(())
 }
 
-fn process_include(filename: &Path, root_path: &str, configuration: &Config, context: &mut Context)
+fn process_include(filename: &Path, root_path: String, configuration: &Config, context: &mut Context)
     -> Result<(), String>
 {
     let include_config = try!(config::read_config_include(filename));
+
     for (path, route) in include_config.iter() {
         let path = format!("{}/{}", root_path.trim_right_matches("/"),
                                     path.trim_left_matches("/"));
 
         match route {
-            &Route::Include(ref filename) => try!(process_include(filename, &path, configuration, context)),
+            &Route::Include(ref filename) => try!(process_include(filename, path, configuration, context)),
             &Route::Handler(ref route_handler) => {
-                try!(process_handler(&path, route_handler, &configuration, context));
+                try!(process_handler(path, route_handler, &configuration, context));
             }
         }
     }
+
     Ok(())
 }
 
-fn process_handler(path: &str,
+fn process_handler(path: String,
                    route: &MethodHandler,
                    configuration: &Config,
                    context: &mut Context)
                    -> Result<(), String>
 {
+    let path = if !path.ends_with("$") {
+        format!("{}$", path)
+    } else {
+        path
+    };
+
     for (method, handler_config) in route.handlers() {
         let mut handler = Handler::new(handler_config.status);
         handler.set_content(handler_config.content.clone());
@@ -63,14 +76,10 @@ fn process_handler(path: &str,
                         &configuration.settings.headers,
                         configuration.settings.headers_replace);
 
-        let path = if !path.ends_with("$") {
-            format!("{}$", path)
-        } else {
-            path.to_owned()
-        };
         try!(context.add_route(&path, method.to_owned(), handler)
             .map_err(|e| format!("Error adding route: {}", e)));
     }
+
     Ok(())
 }
 
