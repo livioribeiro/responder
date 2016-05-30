@@ -1,18 +1,73 @@
-use std::rc::Rc;
+use std::net::{IpAddr, SocketAddr};
+use std::sync::mpsc::{self, SyncSender, SendError, TryRecvError};
+use std::sync::Arc;
 use std::time::Duration;
+use std::thread;
 
-use rotor::{Scope, Time};
-use rotor_http::server::{RecvMode, Server, Head, Response};
+use rotor::{self, Scope, Time};
+use rotor::mio::tcp::TcpListener;
+use rotor_http::server::{RecvMode, Server, Head, Response, Fsm};
 
 use super::context::Context;
 use super::handler::Handler;
 
+pub struct Guard(SyncSender<()>);
+
+impl Guard {
+    pub fn stop(self) -> Result<(), SendError<()>> {
+        self.0.send(())
+    }
+}
+
+pub fn start<A>(mut context: Context, addr: A, port: u16)
+    -> Result<Guard, String>
+    where A: Into<IpAddr>
+{
+    let (tx, rx) = mpsc::sync_channel::<()>(0);
+    context.set_recv(rx);
+
+    let event_loop = rotor::Loop::new(&rotor::Config::new()).unwrap();
+    let mut loop_inst = event_loop.instantiate(context);
+
+    let addr = SocketAddr::new(addr.into(), port);
+    let lst = try!(TcpListener::bind(&addr).map_err(|e| format!("{}", e)));
+
+    try!(loop_inst.add_machine_with(|scope| {
+        Fsm::<Responder, _>::new(lst, (), scope)
+    }).map_err(|e| format!("{}", e)));
+
+    thread::spawn(move || {
+        loop_inst.run().unwrap();
+    });
+
+    Ok(Guard(tx))
+}
+
+pub fn run<A>(context: Context, addr: A, port: u16)
+    -> Result<(), String>
+    where A: Into<IpAddr>
+{
+    let event_loop = rotor::Loop::new(&rotor::Config::new()).unwrap();
+    let mut loop_inst = event_loop.instantiate(context);
+
+    let addr = SocketAddr::new(addr.into(), port);
+    let lst = try!(TcpListener::bind(&addr).map_err(|e| format!("{}", e)));
+
+    try!(loop_inst.add_machine_with(|scope| {
+        Fsm::<Responder, _>::new(lst, (), scope)
+    }).map_err(|e| format!("{}", e)));
+
+    try!(loop_inst.run().map_err(|e| format!("{}", e)));
+
+    Ok(())
+}
+
 pub trait Router {
-    fn match_route(&self, method: &str, path: &str) -> Option<Rc<Handler>>;
+    fn match_route(&self, method: &str, path: &str) -> Option<Arc<Handler>>;
 }
 
 impl Router for Context {
-    fn match_route(&self, method: &str, path: &str) -> Option<Rc<Handler>> {
+    fn match_route(&self, method: &str, path: &str) -> Option<Arc<Handler>> {
         for ref route in self.routes().iter() {
             if route.is_match(method, path) {
                 return Some(route.handler())
@@ -24,7 +79,7 @@ impl Router for Context {
 
 #[derive(Clone, Debug)]
 pub enum Responder {
-    Respond(Rc<Handler>),
+    Respond(Arc<Handler>),
     NotFound,
 }
 
@@ -65,6 +120,17 @@ impl Server for Responder {
                 }
             }
         }
+
+        let shutdown = if let Some(rx) = scope.recv() {
+            match rx.try_recv() {
+                Ok(_) | Err(TryRecvError::Disconnected) => true,
+                _ => false,
+            }
+        } else {
+            false
+        };
+
+        if shutdown { scope.shutdown_loop(); }
 
         let responder = match scope.match_route(head.method, head.path) {
             Some(route) => Responder::Respond(route.clone()),
@@ -113,7 +179,7 @@ impl Server for Responder {
     {
         unimplemented!();
     }
-    
+
     fn wakeup(self, _response: &mut Response, _scope: &mut Scope<Context>)
         -> Option<Self>
     {

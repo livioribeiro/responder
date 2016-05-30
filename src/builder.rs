@@ -72,11 +72,12 @@ const STATUS_CODES: [(u16, &'static str); 62] = [
 
 pub fn build_context(context: &mut Context, configuration: Config) -> Result<(), String> {
     for (path, route) in configuration.routes.iter() {
+        let path = format!("^{}", path);
         match route {
             &Route::Include(ref filename) =>
-                try!(process_include(filename, path, &configuration, context)),
+                try!(process_include(filename, &path, &configuration, context)),
             &Route::Handler(ref route_handler) => {
-                try!(process_handler(path, route_handler, &configuration, context));
+                try!(process_handler(&path, route_handler, &configuration, context));
             }
         }
     }
@@ -138,6 +139,7 @@ fn process_handler(path: &str,
         } else {
             path.to_owned()
         };
+
         try!(context.add_route(&path, method.to_owned(), handler)
             .map_err(|e| format!("Error adding route: {}", e)));
     }

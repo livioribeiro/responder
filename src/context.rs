@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::mpsc::Receiver;
 
 use regex::{self, Regex};
 
@@ -11,7 +12,7 @@ use super::handler::Handler;
 pub struct Route {
     re: Regex,
     method: String,
-    handler: Rc<Handler>,
+    handler: Arc<Handler>,
 }
 
 impl Route {
@@ -19,7 +20,7 @@ impl Route {
         Route {
             re: re,
             method: method,
-            handler: Rc::new(handler),
+            handler: Arc::new(handler),
         }
     }
 
@@ -27,7 +28,7 @@ impl Route {
         self.method == method && self.re.is_match(path)
     }
 
-    pub fn handler(&self) -> Rc<Handler> {
+    pub fn handler(&self) -> Arc<Handler> {
         self.handler.clone()
     }
 }
@@ -37,7 +38,8 @@ pub struct Context {
     routes: Vec<Route>,
     not_found_handler: Option<Handler>,
     config: PathBuf,
-    reload: bool
+    reload: bool,
+    recv: Option<Receiver<()>>,
 }
 
 impl Context {
@@ -47,6 +49,7 @@ impl Context {
             not_found_handler: None,
             config: config_file.to_path_buf(),
             reload: reload,
+            recv: None,
         };
 
         try!(builder::build_context(&mut context, c));
@@ -88,5 +91,13 @@ impl Context {
 
     pub fn reload(&self) -> bool {
         self.reload
+    }
+
+    pub fn recv(&self) -> Option<&Receiver<()>> {
+        self.recv.as_ref()
+    }
+
+    pub fn set_recv(&mut self, recv: Receiver<()>) {
+        self.recv = Some(recv);
     }
 }

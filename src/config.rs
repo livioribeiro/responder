@@ -100,7 +100,7 @@ macro_rules! handler {
             .member("contenttype", V::Scalar::new().optional())
             .member("headers", V::Mapping::new(V::Scalar::new(), V::Scalar::new()))
             .member("content", V::Enum::new()
-                .optional().default_tag("Data")
+                .optional()
                 .option("Data", V::Scalar::new())
                 .option("File", V::Scalar::new()))
     }
