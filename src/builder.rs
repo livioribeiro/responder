@@ -12,7 +12,7 @@ pub fn build_context(context: &mut Context, configuration: Config) -> Result<(),
         } else {
             path.to_owned()
         };
-        
+
         match route {
             &Route::Include(ref filename) =>
                 try!(process_include(filename, path, &configuration, context)),
@@ -64,9 +64,9 @@ fn process_handler(path: String,
         handler.set_content(handler_config.content.clone());
 
         if handler_config.content.is_some() {
-            let content_type = handler_config.contenttype.as_ref()
+            let content_type = handler_config.content_type.as_ref()
                 .map(|x| &**x)
-                .unwrap_or(configuration.settings.contenttype.as_ref());
+                .unwrap_or(configuration.settings.content_type.as_ref());
 
             handler.add_header("Content-Type".to_owned(), content_type.to_owned());
         }
@@ -84,15 +84,15 @@ fn process_handler(path: String,
 }
 
 fn process_notfound(configuration: &Config, context: &mut Context) {
-    match configuration.notfound {
+    match configuration.not_found {
         Some(ref not_found) => {
             let mut handler = Handler::new(404);
             handler.set_content(not_found.content.clone());
 
             if not_found.content.is_some() {
-                let content_type = not_found.contenttype.as_ref()
+                let content_type = not_found.content_type.as_ref()
                     .map(|x| &**x)
-                    .unwrap_or(configuration.settings.contenttype.as_ref());
+                    .unwrap_or(configuration.settings.content_type.as_ref());
 
                 handler.add_header("Content-Type".to_owned(), content_type.to_owned());
             }
@@ -101,7 +101,9 @@ fn process_notfound(configuration: &Config, context: &mut Context) {
                 handler.add_header(key.clone(), val.clone());
             }
 
-            let content_type = not_found.contenttype.clone().unwrap_or("application/json".to_owned());
+            let content_type = not_found.content_type.clone()
+                .unwrap_or("application/json".to_owned());
+
             handler.add_header("Content-Type".to_owned(), content_type.clone());
 
             context.set_not_found_handler(handler);

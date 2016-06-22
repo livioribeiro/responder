@@ -16,7 +16,7 @@ pub enum Content {
 #[derive(RustcDecodable, Debug)]
 pub struct Handler {
     pub status: u16,
-    pub contenttype: Option<String>,
+    pub content_type: Option<String>,
     pub headers: BTreeMap<String, String>,
     pub content: Option<Content>,
 }
@@ -70,7 +70,7 @@ pub enum Route {
 
 #[derive(RustcDecodable, Debug)]
 pub struct NotFound {
-    pub contenttype: Option<String>,
+    pub content_type: Option<String>,
     pub headers: BTreeMap<String, String>,
     pub content: Option<Content>,
 }
@@ -79,7 +79,7 @@ pub struct NotFound {
 pub struct Settings {
     pub address: Option<String>,
     pub port: Option<u16>,
-    pub contenttype: String,
+    pub content_type: String,
     pub headers: BTreeMap<String, String>,
     pub headers_replace: bool,
 }
@@ -87,7 +87,7 @@ pub struct Settings {
 #[derive(RustcDecodable, Debug)]
 pub struct Config {
     pub routes: BTreeMap<String, Route>,
-    pub notfound: Option<NotFound>,
+    pub not_found: Option<NotFound>,
     pub settings: Settings,
 }
 
@@ -95,10 +95,10 @@ macro_rules! handler {
     () => {
         V::Structure::new()
             .member("status", V::Numeric::new().optional().default(200))
-            .member("contenttype", V::Scalar::new().optional())
+            .member("content_type", V::Scalar::new().optional())
             .member("headers", V::Mapping::new(V::Scalar::new(), V::Scalar::new()))
             .member("content", V::Enum::new()
-                .optional().default_tag("Data")
+                .optional()
                 .option("Data", V::Scalar::new())
                 .option("File", V::Scalar::new()))
     }
@@ -114,23 +114,23 @@ pub fn read_config_include(filename: &Path) -> Result<BTreeMap<String, Route>, S
 
 fn validator<'a>() -> V::Structure<'a> {
     let not_found = V::Structure::new()
-        .member("contenttype", V::Scalar::new().optional())
+        .member("content_type", V::Scalar::new().optional())
         .member("headers", V::Mapping::new(V::Scalar::new(), V::Scalar::new()))
         .member("content", V::Enum::new()
-            .optional().default_tag("Data")
+            .optional()
             .option("Data", V::Scalar::new())
             .option("File", V::Scalar::new()));
 
     let settings = V::Structure::new()
         .member("address", V::Scalar::new().optional())
         .member("port", V::Numeric::new().optional())
-        .member("contenttype", V::Scalar::new().optional().default(DEFAULT_CONTENT_TYPE))
+        .member("content_type", V::Scalar::new().optional().default(DEFAULT_CONTENT_TYPE))
         .member("headers", V::Mapping::new(V::Scalar::new(), V::Scalar::new()))
         .member("headers_replace", V::Scalar::new().optional().default(false));
 
     V::Structure::new()
         .member("routes", route_collection())
-        .member("notfound", not_found)
+        .member("not_found", not_found)
         .member("settings", settings)
 }
 

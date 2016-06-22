@@ -9,7 +9,7 @@ routes:
       content: !Data '{ "foo": ["bar", "baz"] }'
   /inc: !Include included.yaml
 
-notfound:
+not-found:
   content: !Data '{ "status": "not found" }'
 
 settings:

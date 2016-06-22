@@ -65,7 +65,7 @@ Handlers are defined using the "!Handler" yaml tag or can import their definitio
 Consists of a mapping of HTTP methods and the response definition, which have the following keys:
 
 * status (optional, default `200`): Status code
-* contenttype (optional, default `application/json`): Content type of the response
+* content-type (optional, default `application/json`): Content type of the response
 * headers (optional): Response headers
 * content (optional): Content to be sent
 
@@ -83,7 +83,7 @@ routes:
   /:
     GET: !Handler
       status: 200
-      contenttype: application/json
+      content-type: application/json
       headers:
         X-Powered-By: rust
       content: !Data '{ "data": "value" }'
@@ -100,14 +100,14 @@ Import configuration from another file.
 
 Structure of the imported file should be the same as the `routes` section of the main file.
 
-### `notfound` section
+### `not-found` section
 
 Defines a response for requests that do not match any route. It's similar to a
 standard handler (without the `code` option). For example:
 
 ```yaml
-notfound:
-  contenttype: application/json
+not-found:
+  content-type: application/json
   headers:
     X-Powered-By: rust
   content: !Data '{ "status": "not found" }'
@@ -119,9 +119,9 @@ Defines settings for the server and global settings for all handlers:
 
 * address: the address to listen for connections
 * port: the port to listen for connections
-* contenttype: default content type for all handlers
+* content-type: default content type for all handlers
 * headers: default headers for all handlers
-* headers_replace: whether headers defined by handlers replace global headers or
+* headers-replace: whether headers defined by handlers replace global headers or
 append to them.
 
 Example:
@@ -135,5 +135,5 @@ routes:
 settings:
   headers:
     X-Powered-By: java
-  headers_replace: true
+  headers-replace: true
 ```
