@@ -4,8 +4,10 @@ use regex::{self, Regex};
 use tiny_http::Method;
 
 use super::builder;
-use super::config::{self, Config};
+use super::config::{self};
 use super::handler::Handler;
+
+pub const DEFAULT_ADDR: &'static str = "127.0.0.1:7000";
 
 #[derive(Debug)]
 pub struct Route {
@@ -45,7 +47,8 @@ pub struct Context {
     routes: Vec<Route>,
     not_found_handler: Option<Handler>,
     config_file: Option<PathBuf>,
-    reload: bool
+    autoreload: bool,
+    address: String,
 }
 
 impl Context {
@@ -54,26 +57,25 @@ impl Context {
             routes: Vec::new(),
             not_found_handler: None,
             config_file: None,
-            reload: false,
+            autoreload: false,
+            address: String::new(),
         }
     }
 
-    pub fn from_config(c: Config, config_file: &Path, reload: bool) -> Result<Self, String> {
+    pub fn from_config_file(config_file: &Path, autoreload: bool) -> Result<Self, String> {
+        let config = try!(config::read_config(config_file));
+
         let mut context = Context {
             routes: Vec::new(),
             not_found_handler: None,
             config_file: Some(config_file.to_path_buf()),
-            reload: reload,
+            autoreload: autoreload,
+            address: config.settings.address.clone().unwrap_or(DEFAULT_ADDR.to_owned()),
         };
 
-        try!(builder::build_context(&mut context, c));
+        try!(builder::build_context(&mut context, config));
 
         Ok(context)
-    }
-
-    pub fn build(config_file: &Path, reload: bool) -> Result<Self, String> {
-        let c = try!(config::read_config(config_file));
-        Self::from_config(c, config_file, reload)
     }
 
     pub fn rebuild(&mut self) -> Result<(), String> {
@@ -118,7 +120,11 @@ impl Context {
         self.not_found_handler = Some(not_found);
     }
 
-    pub fn reload(&self) -> bool {
-        self.reload
+    pub fn autoreload(&self) -> bool {
+        self.autoreload
+    }
+
+    pub fn address(&self) -> &str {
+        &self.address
     }
 }

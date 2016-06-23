@@ -78,7 +78,6 @@ pub struct NotFound {
 #[derive(RustcDecodable, Debug)]
 pub struct Settings {
     pub address: Option<String>,
-    pub port: Option<u16>,
     pub content_type: String,
     pub headers: BTreeMap<String, String>,
     pub headers_replace: bool,
@@ -123,7 +122,6 @@ fn validator<'a>() -> V::Structure<'a> {
 
     let settings = V::Structure::new()
         .member("address", V::Scalar::new().optional())
-        .member("port", V::Numeric::new().optional())
         .member("content_type", V::Scalar::new().optional().default(DEFAULT_CONTENT_TYPE))
         .member("headers", V::Mapping::new(V::Scalar::new(), V::Scalar::new()))
         .member("headers_replace", V::Scalar::new().optional().default(false));

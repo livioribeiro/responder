@@ -13,8 +13,7 @@ FLAGS:
 
 OPTIONS:
     -c, --config <FILE>        Config file used to generate the server [default: responder.yaml]
-    -a, --address <ADDRESS>    Address to listen for connections [default: 127.0.0.1]
-    -p, --port <PORT>          Port to listen for connections [default: 7000]
+    -b, --bind <ADDRESS>       Address to bind server to [default: 127.0.0.1:7000]
 ```
 
 Server is generated from yaml file (default `responder.yaml`), for example:
@@ -38,8 +37,7 @@ notfound:
   content: !Data '{ "status": "not found" }'
 
 settings:
-  address: 0.0.0.0
-  port: 8000
+  address: 0.0.0.0:8000
 ```
 
 Included file `included.yaml` would look like:
