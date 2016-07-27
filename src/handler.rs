@@ -4,22 +4,21 @@ use std::io::Read;
 use rotor_http::server::Response;
 
 use super::config::Content;
+use super::http_status;
 
 type Headers = Vec<(String, Vec<u8>)>;
 
 #[derive(Clone, Debug)]
 pub struct Handler {
-    status_code: u16,
-    status_text: String,
+    status: u16,
     content: Option<Content>,
     headers: Headers,
 }
 
 impl Handler {
-    pub fn new(status_code: u16, status_text: String) -> Self {
+    pub fn new(status: u16) -> Self {
         Handler {
-            status_code: status_code,
-            status_text: status_text,
+            status: status,
             content: None,
             headers: Headers::new(),
         }
@@ -39,7 +38,8 @@ impl Handler {
     }
 
     pub fn handle(&self, res: &mut Response) -> Result<(), String> {
-        res.status(self.status_code, &self.status_text);
+        let (status_code, status_text) = (self.status, http_status::description(self.status));
+        res.status(status_code, status_text);
         match self.content {
             Some(Content::Data(ref data)) => {
                 res.add_length(data.len() as u64).unwrap();

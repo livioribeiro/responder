@@ -3,15 +3,14 @@ routes:
     GET:
       content: !File response.json
     POST:
-      code: 201
+      status: 201
   /foo/(\d+?): !Handler
     GET:
       content: !Data '{ "foo": ["bar", "baz"] }'
   /inc: !Include included.yaml
 
-notfound:
+not-found:
   content: !Data '{ "status": "not found" }'
 
 settings:
-  address: 0.0.0.0
-  port: 8000
+  address: 0.0.0.0:8000

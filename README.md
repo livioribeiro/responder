@@ -13,8 +13,7 @@ FLAGS:
 
 OPTIONS:
     -c, --config <FILE>        Config file used to generate the server [default: responder.yaml]
-    -a, --address <ADDRESS>    Address to listen for connections [default: 127.0.0.1]
-    -p, --port <PORT>          Port to listen for connections [default: 7000]
+    -b, --bind <ADDRESS>       Address to bind server to [default: 127.0.0.1:7000]
 ```
 
 Server is generated from yaml file (default `responder.yaml`), for example:
@@ -25,7 +24,7 @@ routes:
     GET:
       content: !Data '{ "name": "value" }'
     POST:
-      code: 201
+      status: 201
   /foo/(\d+?): !Handler
     GET:
       content: !Data '{ "foo": "bar" }'
@@ -38,8 +37,7 @@ notfound:
   content: !Data '{ "status": "not found" }'
 
 settings:
-  address: 0.0.0.0
-  port: 8000
+  address: 0.0.0.0:8000
 ```
 
 Included file `included.yaml` would look like:
@@ -64,9 +62,8 @@ Handlers are defined using the "!Handler" yaml tag or can import their definitio
 
 Consists of a mapping of HTTP methods and the response definition, which have the following keys:
 
-* code (optional, default `200`): Status code
-* status (optional, guessed from code): Status text
-* contenttype (optional, default `application/json`): Content type of the response
+* status (optional, default `200`): Status code
+* content-type (optional, default `application/json`): Content type of the response
 * headers (optional): Response headers
 * content (optional): Content to be sent
 
@@ -83,14 +80,13 @@ Example:
 routes:
   /:
     GET: !Handler
-      code: 200
-      status: Ok
-      contenttype: application/json
+      status: 200
+      content-type: application/json
       headers:
         X-Powered-By: rust
       content: !Data '{ "data": "value" }'
     POST: !Handler
-      code: 201
+      status: 201
   /file:
     GET: !Handler
       content: !File content.json
@@ -102,15 +98,14 @@ Import configuration from another file.
 
 Structure of the imported file should be the same as the `routes` section of the main file.
 
-### `notfound` section
+### `not-found` section
 
 Defines a response for requests that do not match any route. It's similar to a
 standard handler (without the `code` option). For example:
 
 ```yaml
-notfound:
-  status: Not Found
-  contenttype: application/json
+not-found:
+  content-type: application/json
   headers:
     X-Powered-By: rust
   content: !Data '{ "status": "not found" }'
@@ -122,9 +117,9 @@ Defines settings for the server and global settings for all handlers:
 
 * address: the address to listen for connections
 * port: the port to listen for connections
-* contenttype: default content type for all handlers
+* content-type: default content type for all handlers
 * headers: default headers for all handlers
-* headers_replace: whether headers defined by handlers replace global headers or
+* headers-replace: whether headers defined by handlers replace global headers or
 append to them.
 
 Example:
@@ -138,5 +133,5 @@ routes:
 settings:
   headers:
     X-Powered-By: java
-  headers_replace: true
+  headers-replace: true
 ```

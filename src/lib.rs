@@ -1,5 +1,7 @@
+#[macro_use(rotor_compose)]
 extern crate rotor;
 extern crate rotor_http;
+extern crate rotor_tools;
 extern crate quire;
 extern crate rustc_serialize;
 extern crate regex;
@@ -9,6 +11,7 @@ pub mod handler;
 pub mod config;
 pub mod builder;
 pub mod context;
+mod http_status;
 
 pub use server::Responder;
 pub use handler::Handler;

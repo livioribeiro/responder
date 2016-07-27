@@ -1,15 +1,22 @@
-use std::net::{IpAddr, SocketAddr};
-use std::sync::mpsc::{self, SyncSender, SendError, TryRecvError};
+use std::net::SocketAddr;
+use std::sync::mpsc::{self, SyncSender, SendError, Receiver, TryRecvError};
 use std::sync::Arc;
 use std::time::Duration;
 use std::thread;
 
 use rotor::{self, Scope, Time};
 use rotor::mio::tcp::TcpListener;
+use rotor::void::Void;
 use rotor_http::server::{RecvMode, Server, Head, Response, Fsm};
+use rotor_tools::timer::{IntervalFunc, interval_func};
 
 use super::context::Context;
 use super::handler::Handler;
+
+rotor_compose!(enum Machine/Seed<Context> {
+    Http(Fsm<Responder, TcpListener>),
+    Timer(IntervalFunc<Context>),
+});
 
 pub struct Guard(SyncSender<()>);
 
@@ -19,21 +26,39 @@ impl Guard {
     }
 }
 
-pub fn start<A>(mut context: Context, addr: A, port: u16)
+fn create_interval(scope: &mut Scope<Context>, duration: Duration, rx: Receiver<()>)
+-> rotor::Response<IntervalFunc<Context>, Void>
+{
+    interval_func(scope, duration, move |scope: &mut Scope<Context>| {
+        match rx.try_recv() {
+            Ok(_) | Err(TryRecvError::Disconnected) => {
+                println!("Stopping server");
+                scope.shutdown_loop();
+            }
+            _ => {},
+        }
+    })
+}
+
+pub fn start(context: Context, address: &str)
     -> Result<Guard, String>
-    where A: Into<IpAddr>
 {
     let (tx, rx) = mpsc::sync_channel::<()>(0);
-    context.set_recv(rx);
 
     let event_loop = rotor::Loop::new(&rotor::Config::new()).unwrap();
     let mut loop_inst = event_loop.instantiate(context);
 
-    let addr = SocketAddr::new(addr.into(), port);
-    let lst = try!(TcpListener::bind(&addr).map_err(|e| format!("{}", e)));
+    let address: SocketAddr = try!(address.parse().map_err(|e| format!("{}", e)));
+    let lst = try!(TcpListener::bind(&address).map_err(|e| format!("{}", e)));
 
     try!(loop_inst.add_machine_with(|scope| {
-        Fsm::<Responder, _>::new(lst, (), scope)
+        Fsm::<Responder, TcpListener>::new(lst, (), scope)
+            .wrap(|fsm| Machine::Http(fsm))
+    }).map_err(|e| format!("{}", e)));
+
+    try!(loop_inst.add_machine_with(|scope| {
+        create_interval(scope, Duration::new(1, 0), rx)
+            .wrap(|fsm| Machine::Timer(fsm))
     }).map_err(|e| format!("{}", e)));
 
     thread::spawn(move || {
@@ -43,18 +68,17 @@ pub fn start<A>(mut context: Context, addr: A, port: u16)
     Ok(Guard(tx))
 }
 
-pub fn run<A>(context: Context, addr: A, port: u16)
+pub fn run(context: Context, address: &str)
     -> Result<(), String>
-    where A: Into<IpAddr>
 {
     let event_loop = rotor::Loop::new(&rotor::Config::new()).unwrap();
     let mut loop_inst = event_loop.instantiate(context);
 
-    let addr = SocketAddr::new(addr.into(), port);
-    let lst = try!(TcpListener::bind(&addr).map_err(|e| format!("{}", e)));
+    let address: SocketAddr = try!(address.parse().map_err(|e| format!("{}", e)));
+    let lst = try!(TcpListener::bind(&address).map_err(|e| format!("{}", e)));
 
     try!(loop_inst.add_machine_with(|scope| {
-        Fsm::<Responder, _>::new(lst, (), scope)
+        Fsm::<Responder, TcpListener>::new(lst, (), scope)
     }).map_err(|e| format!("{}", e)));
 
     try!(loop_inst.run().map_err(|e| format!("{}", e)));
@@ -111,7 +135,7 @@ impl Server for Responder {
         scope: &mut Scope<Self::Context>)
         -> Option<(Self, RecvMode, Time)>
     {
-        if scope.reload() {
+        if scope.autoreload() {
             match scope.rebuild() {
                 Ok(_) => {}
                 Err(e) => {
@@ -121,16 +145,16 @@ impl Server for Responder {
             }
         }
 
-        let shutdown = if let Some(rx) = scope.recv() {
-            match rx.try_recv() {
-                Ok(_) | Err(TryRecvError::Disconnected) => true,
-                _ => false,
-            }
-        } else {
-            false
-        };
-
-        if shutdown { scope.shutdown_loop(); }
+        // let shutdown = if let Some(rx) = scope.recv() {
+        //     match rx.try_recv() {
+        //         Ok(_) | Err(TryRecvError::Disconnected) => true,
+        //         _ => false,
+        //     }
+        // } else {
+        //     false
+        // };
+        //
+        // if shutdown { scope.shutdown_loop(); }
 
         let responder = match scope.match_route(head.method, head.path) {
             Some(route) => Responder::Respond(route.clone()),
@@ -184,5 +208,20 @@ impl Server for Responder {
         -> Option<Self>
     {
         unimplemented!();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::thread;
+    use std::time::Duration;
+    use context::Context;
+    use super::start as start_server;
+
+    #[test]
+    fn server_shutdown() {
+        let context = Context::new();
+        let guard = start_server(context, "127.0.0.1:7000").unwrap();
+        guard.stop().unwrap();
     }
 }
