@@ -11,7 +11,7 @@ pub mod handler;
 pub mod config;
 pub mod builder;
 pub mod context;
-mod http_status;
+pub mod http_status;
 
 pub use server::Responder;
 pub use handler::Handler;
