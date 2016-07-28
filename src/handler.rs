@@ -10,7 +10,7 @@ type Headers = Vec<(String, Vec<u8>)>;
 
 #[derive(Clone, Debug)]
 pub struct Handler {
-    status: u16,
+    pub status: u16,
     content: Option<Content>,
     headers: Headers,
 }

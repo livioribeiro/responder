@@ -33,7 +33,7 @@ fn create_interval(scope: &mut Scope<Context>, duration: Duration, rx: Receiver<
     interval_func(scope, duration, move |scope: &mut Scope<Context>| {
         match rx.try_recv() {
             Ok(_) | Err(TryRecvError::Disconnected) => {
-                println!("Stopping server");
+                info!("Stopping server");
                 scope.shutdown_loop();
             }
             _ => {},
@@ -102,10 +102,12 @@ impl Router for Context {
     }
 }
 
+pub type MethodPath = (String, String);
+
 #[derive(Clone, Debug)]
 pub enum Responder {
-    Respond(Arc<Handler>),
-    NotFound,
+    Respond(Arc<Handler>, (MethodPath)),
+    NotFound(MethodPath),
 }
 
 fn send_not_found(res: &mut Response) {
@@ -142,15 +144,16 @@ impl Server for Responder {
             match scope.rebuild() {
                 Ok(_) => {}
                 Err(e) => {
-                    println!("{}", e);
+                    error!("{}", e);
                     return None
                 }
             }
         }
 
+        let mp = (head.method.to_owned(), head.path.to_owned());
         let responder = match scope.match_route(head.method, head.path) {
-            Some(route) => Responder::Respond(route.clone()),
-            None => Responder::NotFound,
+            Some(handler) => Responder::Respond(handler.clone(), mp),
+            None => Responder::NotFound(mp),
         };
 
         Some((responder, RecvMode::Buffered(1024), scope.now() + Duration::new(10, 0)))
@@ -160,18 +163,40 @@ impl Server for Responder {
         scope: &mut Scope<Context>)
         -> Option<Self>
     {
+        let method_path: MethodPath;
+        let status: u16;
         let result = match self {
-            Responder::Respond(handler) => {
+            Responder::Respond(handler, mp) => {
+                method_path = mp;
+                status = handler.status;
                 handler.handle(res)
             },
-            Responder::NotFound => {
+            Responder::NotFound(mp) => {
+                method_path = mp;
+                status = 404;
                 match scope.not_found_handler() {
                     Some(ref handler) => handler.handle(res),
                     None => { send_not_found(res); Ok(()) },
                 }
             }
         };
-        result.map_err(|e| send_error(res, &e)).ok();
+
+        // info!("{} {}", handler.status, http_status::description(handler.status));
+
+        result
+        .map(|_| {
+            if status == 404 {
+                warn!("{} {} {}", status, method_path.0, method_path.1);
+            } else {
+                info!("{} {} {}", status, method_path.0, method_path.1);
+            }
+        })
+        .map_err(|e| {
+            error!("500 {} {}", method_path.0, method_path.1);
+            error!("{}", &e);
+            send_error(res, &e)
+        })
+        .ok();
 
         None
     }

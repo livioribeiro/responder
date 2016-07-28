@@ -6,6 +6,9 @@ extern crate quire;
 extern crate rustc_serialize;
 extern crate regex;
 
+#[macro_use]
+extern crate log;
+
 pub mod server;
 pub mod handler;
 pub mod config;

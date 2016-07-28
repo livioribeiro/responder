@@ -1,12 +1,23 @@
-extern crate responder;
-#[macro_use] extern crate clap;
+#[macro_use]
+extern crate clap;
 
+#[macro_use]
+extern crate log;
+extern crate env_logger;
+extern crate chrono;
+
+extern crate responder;
+
+use std::env::{self, VarError};
 use std::io::{self, Write};
 use std::net::SocketAddr;
 use std::path::Path;
 use std::process;
 
 use clap::{App, Arg, Format};
+use log::{LogRecord, LogLevel, LogLevelFilter};
+use env_logger::LogBuilder;
+use chrono::offset::local::Local as LocalTime;
 
 use responder::Context;
 use responder::server;
@@ -15,6 +26,15 @@ use responder::context::DEFAULT_ADDR;
 const DEFAULT_CONFIG: &'static str = "responder.yaml";
 
 fn main() {
+    match setup_logger() {
+        Ok(_) => {},
+        Err(e) => {
+            write!(io::stderr(), "{} {}\n", Format::Error("error:"), e)
+                .expect("Unknown error");
+            process::exit(1);
+        }
+    };
+
     let matches = App::new("Responder")
         .version(crate_version!())
         .author("Livio Ribeiro <livioribeiro@outlook.com>")
@@ -54,10 +74,35 @@ fn main() {
         Ok(_) => {}
         Err(e) => {
             write!(io::stderr(), "{} {}\n", Format::Error("error:"), e)
-                .expect("An error ocurred while processing previous error");
+                .expect("Unknown error");
             process::exit(1);
         }
     }
+}
+
+fn setup_logger() -> Result<(), String> {
+    let format = |record: &LogRecord| {
+        let now = LocalTime::now().time().format("%H:%M:%S");
+        let rec_level = format!("{}", record.level());
+        let level = match record.level() {
+            LogLevel::Error => Format::Error(rec_level),
+            LogLevel::Warn => Format::Warning(rec_level),
+            LogLevel::Info => Format::Good(rec_level),
+            LogLevel::Debug | LogLevel::Trace => Format::None(rec_level),
+        };
+        format!("[{}] {} {}", now, level, record.args())
+    };
+
+    let mut builder = LogBuilder::new();
+    builder.format(format).filter(Some("responder"), LogLevelFilter::Info);
+
+    match env::var("RUST_LOG") {
+        Ok(rust_log) => { builder.parse(&rust_log); },
+        Err(VarError::NotPresent) => {}
+        Err(e) => return Err(format!("RUST_LOG {}", e)),
+    }
+
+    builder.init().map_err(|e| format!("{}", e))
 }
 
 fn address_validator(arg: String) -> Result<(), String> {
@@ -75,7 +120,7 @@ fn run_server(address: Option<&str>, config_file: &Path, reload: bool)
         .unwrap_or(DEFAULT_ADDR)
         .to_owned();
 
-    println!("Starting http server on http://{}/", &address);
+    info!("Starting http server at http://{}/", &address);
 
     try!(server::run(context, &address));
     Ok(())
