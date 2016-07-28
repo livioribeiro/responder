@@ -12,6 +12,7 @@ use rotor_tools::timer::{IntervalFunc, interval_func};
 
 use super::context::Context;
 use super::handler::Handler;
+use super::http_status;
 
 rotor_compose!(enum Machine/Seed<Context> {
     Http(Fsm<Responder, TcpListener>),
@@ -109,7 +110,8 @@ pub enum Responder {
 
 fn send_not_found(res: &mut Response) {
     let data = b"404 - Page not found";
-    res.status(404, "Not Found");
+    let status = http_status::NotFound;
+    res.status(status.code(), status.description());
     res.add_length(data.len() as u64).unwrap();
     res.add_header("Content-Type", b"text/plain").unwrap();
     res.done_headers().unwrap();
@@ -119,7 +121,8 @@ fn send_not_found(res: &mut Response) {
 
 fn send_error(res: &mut Response, data: &str) {
     let data = data.as_bytes();
-    res.status(500, "Internal Server Error");
+    let status = http_status::InternalServerError;
+    res.status(status.code(), status.description());
     res.add_length(data.len() as u64).unwrap();
     res.add_header("Content-Type", b"text/plain").unwrap();
     res.done_headers().unwrap();
