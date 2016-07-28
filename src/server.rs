@@ -145,17 +145,6 @@ impl Server for Responder {
             }
         }
 
-        // let shutdown = if let Some(rx) = scope.recv() {
-        //     match rx.try_recv() {
-        //         Ok(_) | Err(TryRecvError::Disconnected) => true,
-        //         _ => false,
-        //     }
-        // } else {
-        //     false
-        // };
-        //
-        // if shutdown { scope.shutdown_loop(); }
-
         let responder = match scope.match_route(head.method, head.path) {
             Some(route) => Responder::Respond(route.clone()),
             None => Responder::NotFound,
