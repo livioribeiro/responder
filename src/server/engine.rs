@@ -1,101 +1,33 @@
-use std::io::{self, Write};
-use std::net::SocketAddr;
-use std::sync::mpsc::{self, SyncSender, SendError, Receiver, TryRecvError};
 use std::sync::Arc;
 use std::time::Duration;
-use std::thread;
 
-use rotor::{self, Scope, Time};
+use rotor::{Response as RotorResponse, Scope, Time, Void};
 use rotor::mio::tcp::TcpListener;
-use rotor::void::Void;
-use rotor_http::server::{RecvMode, Server, Head, Response, Fsm};
+use rotor_http::server::{Fsm as RotorFsm, Head, RecvMode, Server, Response};
 use rotor_tools::timer::{IntervalFunc, interval_func};
 
-use super::context::Context;
-use super::handler::Handler;
-use super::http_status;
+use context::Context;
+use handler::Handler;
+use http_status;
 
-rotor_compose!(enum Machine/Seed<Context> {
-    Http(Fsm<Responder, TcpListener>),
+
+pub fn new_http(lst: TcpListener, seed: <Responder as Server>::Seed, scope: &mut Scope<Context>)
+-> RotorResponse<Fsm, Void>
+{
+    RotorFsm::<Responder, _>::new(lst, seed, scope).wrap(|fsm| Fsm::Http(fsm))
+}
+
+pub fn new_timer<F>(scope: &mut Scope<Context>, duration: Duration, func: F)
+-> RotorResponse<Fsm, Void>
+where F: FnMut(&mut Scope<Context>) + 'static + Send
+{
+    interval_func(scope, duration, func).wrap(|fsm| Fsm::Timer(fsm))
+}
+
+rotor_compose!(pub enum Fsm/Seed<Context> {
+    Http(RotorFsm<Responder, TcpListener>),
     Timer(IntervalFunc<Context>),
 });
-
-pub struct Guard(SyncSender<()>);
-
-impl Guard {
-    pub fn stop(self) -> Result<(), SendError<()>> {
-        self.0.send(())
-    }
-}
-
-impl Drop for Guard {
-    fn drop(&mut self) {
-        if let Err(e) = self.0.send(()) {
-            writeln!(io::stderr(), "Error stopping server thread: {}", e)
-                .expect("Unable to write to stderr");
-        }
-    }
-}
-
-fn create_interval(scope: &mut Scope<Context>, duration: Duration, rx: Receiver<()>)
--> rotor::Response<IntervalFunc<Context>, Void>
-{
-    interval_func(scope, duration, move |scope: &mut Scope<Context>| {
-        match rx.try_recv() {
-            Ok(_) | Err(TryRecvError::Disconnected) => {
-                info!("Stopping server");
-                scope.shutdown_loop();
-            }
-            _ => {},
-        }
-    })
-}
-
-pub fn start(context: Context, address: &str)
-    -> Result<Guard, String>
-{
-    let (tx, rx) = mpsc::sync_channel::<()>(0);
-
-    let event_loop = rotor::Loop::new(&rotor::Config::new()).unwrap();
-    let mut loop_inst = event_loop.instantiate(context);
-
-    let address: SocketAddr = try!(address.parse().map_err(|e| format!("{}", e)));
-    let lst = try!(TcpListener::bind(&address).map_err(|e| format!("{}", e)));
-
-    try!(loop_inst.add_machine_with(|scope| {
-        Fsm::<Responder, TcpListener>::new(lst, (), scope)
-            .wrap(|fsm| Machine::Http(fsm))
-    }).map_err(|e| format!("{}", e)));
-
-    try!(loop_inst.add_machine_with(|scope| {
-        create_interval(scope, Duration::new(1, 0), rx)
-            .wrap(|fsm| Machine::Timer(fsm))
-    }).map_err(|e| format!("{}", e)));
-
-    thread::spawn(move || {
-        loop_inst.run().unwrap();
-    });
-
-    Ok(Guard(tx))
-}
-
-pub fn run(context: Context, address: &str)
-    -> Result<(), String>
-{
-    let event_loop = rotor::Loop::new(&rotor::Config::new()).unwrap();
-    let mut loop_inst = event_loop.instantiate(context);
-
-    let address: SocketAddr = try!(address.parse().map_err(|e| format!("{}", e)));
-    let lst = try!(TcpListener::bind(&address).map_err(|e| format!("{}", e)));
-
-    try!(loop_inst.add_machine_with(|scope| {
-        Fsm::<Responder, TcpListener>::new(lst, (), scope)
-    }).map_err(|e| format!("{}", e)));
-
-    try!(loop_inst.run().map_err(|e| format!("{}", e)));
-
-    Ok(())
-}
 
 pub trait Router {
     fn match_route(&self, method: &str, path: &str) -> Option<Arc<Handler>>;
@@ -116,7 +48,7 @@ pub type MethodPath = (String, String);
 
 #[derive(Clone, Debug)]
 pub enum Responder {
-    Respond(Arc<Handler>, (MethodPath)),
+    Respond(Arc<Handler>, MethodPath),
     NotFound(MethodPath),
 }
 
@@ -233,20 +165,5 @@ impl Server for Responder {
         -> Option<Self>
     {
         unimplemented!();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::thread;
-    use std::time::Duration;
-    use context::Context;
-    use super::start as start_server;
-
-    #[test]
-    fn server_shutdown() {
-        let context = Context::new();
-        let guard = start_server(context, "127.0.0.1:7000").unwrap();
-        guard.stop().unwrap();
     }
 }
