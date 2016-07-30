@@ -181,8 +181,6 @@ impl Server for Responder {
             }
         };
 
-        // info!("{} {}", handler.status, http_status::description(handler.status));
-
         result
         .map(|_| {
             if status == 404 {
